@@ -1,0 +1,52 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.11", "3.12"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      # [jev] installs the SDK so the recorded-response replay test runs; no key is needed.
+      - run: pip install -e ".[dev,jev]"
+      - run: pytest -q
+
+  # The README's documented path: ".[dev]" alone, no SDK. The suite must pass here too.
+  # This leg exists because a test that only passes with the SDK installed has slipped
+  # through twice; a clean clone caught it both times. Now CI is the clean clone.
+  test-without-sdk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - run: python -c "import importlib.util, sys; sys.exit(0 if importlib.util.find_spec('typesafe_sdk') is None else 'SDK unexpectedly present')"
+      - run: pytest -q
+      - run: jev-janitor ./fixtures/notes --offline
+      - run: jev-janitor ./fixtures/notes --plan
+
+  # A non-editable install, exercised from a directory that is not the checkout. An
+  # editable install resolves package-relative paths back into the repo and so hid, through
+  # 0.2.1, that the wheel did not ship the default taxonomy at all.
+  test-installed:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install .
+      - run: cd /tmp && jev-janitor "$GITHUB_WORKSPACE/fixtures/notes" --offline
+      - run: cd /tmp && python -c "from janitor.schema import DEFAULT_TAXONOMY, load_taxonomy; load_taxonomy(); print(DEFAULT_TAXONOMY)"

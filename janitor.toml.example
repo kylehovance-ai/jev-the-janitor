@@ -1,0 +1,47 @@
+# jev-janitor vault profile. Copy to <your vault>/janitor.toml and edit.
+#
+# A flag on the command line overrides the matching key for that one run. A key you leave
+# out keeps the built-in default shown here. The pre-flight names the profile it used and
+# its fingerprint on every run. The janitor reads this file and never writes it.
+#
+# Paths are relative to this file. Unknown keys are refused, not ignored.
+
+# Folder names treated as sensitive, matched as whole words of a folder name, case-insensitively
+# ('_Inbox' and '00 Inbox' are 'inbox'; 'inboxes' is not and the pre-flight warns about it).
+# This REPLACES the default list, so keep the defaults you still want.
+sensitive_paths = ["family", "private", "personal", "secrets", "inbox"]
+
+# Names and terms to strip locally before anything is sent. One per line, '#' comments.
+# denylist = "denylist.txt"
+
+# The taxonomy Jev is asked with. Editing it moves the votes; re-calibrate after any change.
+# taxonomy = "vault_memory.yaml"
+
+# Characters of each note sent after local redaction. "full" or 0 sends whole notes up to the
+# 60,000-character hard guard. Changing this changes the cache key of every note longer than
+# the smaller cap.
+excerpt_chars = 16000
+
+# Concurrent requests. 16 measured as the optimum; 8 is the default so a free service is not
+# given a reason to grow a rate limiter.
+workers = 8
+
+# Where the run journal goes: "default" (the user cache dir, outside the vault), "vault"
+# (<vault>/_janitor/runs/), "off", or a directory. Nothing is written into the vault unless
+# you say "vault" here or on the command line.
+journal = "default"
+
+# Ceiling, in dollars, for one live run's pessimistic cost estimate, computed from the actual
+# redacted payloads at the densest chars-per-token ever measured. A run whose estimate is
+# over it refuses with exit 1; --over-budget accepts the bill for one run. 0 means no ceiling.
+# For scale: a real 18,738-note pass at the default excerpt cap estimates about $0.68 to $0.99.
+max_usd = 2.00
+
+# Quarantine when safe_to_leave_in_git is at or below this. Off unless set: a threshold
+# picked without a calibration run is a guess that moves files.
+# git_unsafe_below = 0.2
+
+# Scan notes on sensitive paths too. Their titles are still never sibling context.
+# include_sensitive = false
+
+# model = "jev-latest"

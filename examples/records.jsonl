@@ -1,0 +1,5 @@
+{"id": "idea-001", "sent": {"name": "Weekly digest email", "what": "Send subscribers a summary of the week's notes every Friday.", "date": "2026-08-14", "status": "open"}, "owner": "never read, never sent"}
+{"id": "idea-002", "sent": {"name": "Offline mode", "what": "Cache the last answers so the tool works on a train.", "date": "2026-08-20", "status": "open", "tags": ["reliability", "mobile"]}}
+{"id": "idea-003", "sent": {"name": "Offline mode", "what": "Cache the last answers so the tool works on a train.", "date": "2026-08-20", "status": "open", "tags": ["reliability", "mobile"]}}
+{"id": "idea-004", "sent": {"name": "Pricing page redo", "what": "Three tiers instead of five; drop the enterprise call-to-action.", "date": "2026-09-01", "status": "parked", "revenue": 1200}}
+{"id": "idea-005", "sent": {"name": "Contact import", "what": "Import from a CSV; ask ops@example.com for the sample file.", "date": "2026-09-03", "status": "open"}}

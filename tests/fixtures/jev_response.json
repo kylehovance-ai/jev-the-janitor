@@ -1,0 +1,59 @@
+{
+  "model": "jev-1.13.0",
+  "usage": {
+    "input_tokens": 953,
+    "output_tokens": 195
+  },
+  "answers": {
+    "bucket": {
+      "type": "choice",
+      "choice": "project_decision",
+      "confidence": 0.87,
+      "probabilities": {
+        "code_note": 0.11,
+        "project_decision": 0.88,
+        "log_entry": 0.0,
+        "ephemeral": 0.0,
+        "junk": 0.0,
+        "durable_memory": 0.01,
+        "reference": 0.0,
+        "needs_review": 0.0
+      }
+    },
+    "persist": {
+      "type": "score",
+      "score": 1.23,
+      "confidence": 0.52,
+      "legend": {
+        "0": "drop - not worth keeping; marking only, deletion is never automatic",
+        "1": "park - keep the file where it is, do not promote to long-term memory",
+        "2": "promote - keep as long-term memory"
+      },
+      "probabilities": {
+        "0": 0.05,
+        "1": 0.67,
+        "2": 0.28
+      }
+    },
+    "contains_secret": {
+      "type": "noul",
+      "noul": 0.31
+    },
+    "looks_like_duplicate": {
+      "type": "noul",
+      "noul": 0.08
+    },
+    "records_a_decision": {
+      "type": "noul",
+      "noul": 0.93
+    },
+    "is_actionable": {
+      "type": "noul",
+      "noul": 0.22
+    },
+    "safe_to_leave_in_git": {
+      "type": "noul",
+      "noul": 0.18
+    }
+  }
+}

@@ -1,0 +1,28 @@
+# An example question set for `jev-records`: triage product ideas into lanes.
+# Same layout as janitor/taxonomies/vault_memory.yaml; any Choice, Scores and Nouls.
+# `review_choice` names the Choice the 0.55 review floor applies to (default: the first Choice).
+
+review_choice: lane
+
+questions:
+  lane:
+    type: choice
+    instructions: Which lane should this idea go in? Judge the description, not the name.
+    options:
+      build: Small, clear, and worth doing next.
+      research: Promising but the shape is unknown; needs a spike first.
+      park: Real but not now.
+      drop: Not worth the time.
+  urgency:
+    type: score
+    instructions: How urgent is this idea?
+    levels:
+      - "none - no date, no one waiting"
+      - "soon - someone is waiting or a date is near"
+      - "now - blocking something this week"
+  mentions_money:
+    type: noul
+    instructions: Does this idea mention revenue, pricing or cost?
+  contains_secret:
+    type: noul
+    instructions: Does this record contain credentials, keys, tokens, or private identifiers that should not leave the machine?

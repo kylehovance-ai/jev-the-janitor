@@ -1,0 +1,54 @@
+# Default question set for Jev the Janitor.
+#
+# Edit freely. These sentences are the entire knowledge base Jev has for this task:
+# there is no built-in notion of "durable" or "scratch". Change the words, change the votes.
+# Every word Jev is asked is in this file, so the fingerprint stamped on each vote covers
+# all of it. (Through 0.4.2 the two `instructions` sentences of `bucket` and `persist` lived
+# in Python and were outside the fingerprint; the wording is unchanged since then.)
+#
+# Each entry under `questions` is one question, sent in this order:
+#   type: choice   instructions + options (name: criterion), at most 255 options
+#   type: score    instructions + levels (an ordered rubric; index 0 is the first entry), at most 10 levels
+#   type: noul     instructions only; the answer is a probability in [0, 1]
+# The vault scan needs a choice named `bucket`, a score named `persist`, and the five nouls below.
+
+questions:
+  bucket:
+    type: choice
+    instructions: Which vault bucket should this note live in? Judge the note itself, not the filename, unless the body is empty.
+    options:
+      durable_memory: A standing fact worth keeping across sessions, still true and useful next month.
+      project_decision: A dated choice that future work on the project must honor.
+      code_note: Implementation detail, command, schema, config, or benchmark.
+      reference: Third-party docs, quotes, or links with no original decision of your own.
+      log_entry: A dated run report, scan, digest, or snapshot, produced routinely or automatically. Kept as a record of what happened that day, not as a standing fact and not as a decision.
+      ephemeral: Scratch, chat debris, a mood, or a thought that should expire.
+      junk: Empty, boilerplate, placeholder text, or duplicate noise.
+      needs_review: Not enough signal to say. A human should look.
+
+  persist:
+    type: score
+    instructions: How worth keeping is this note as long-term vault memory?
+    levels:
+      - "drop - not worth keeping; marking only, deletion is never automatic"
+      - "park - keep the file where it is, do not promote to long-term memory"
+      - "promote - keep as long-term memory"
+
+  contains_secret:
+    type: noul
+    instructions: Does this note contain credentials, keys, tokens, or private identifiers that should not leave the machine?
+  looks_like_duplicate:
+    type: noul
+    instructions: Is this substantially the same claim as one of the other note titles listed?
+  records_a_decision:
+    type: noul
+    instructions: Does this note record a decision that was made, as opposed to a recommendation, a plan, or a status report?
+  is_actionable:
+    type: noul
+    instructions: Does this note ask someone to do something specific, whether or not a decision was made?
+  safe_to_leave_in_git:
+    type: noul
+    instructions: >-
+      This excerpt is redacted — bracketed tokens such as [EMAIL] or [KEY] mark sensitive content
+      that was removed before sending. Judging the original note those tokens came from, would it be
+      reasonable to commit it to a public repository?

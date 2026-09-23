@@ -1,0 +1,10 @@
+# Text files are stored with LF. Windows checkouts keep LF too, so the taxonomy fingerprint
+# and the recorded fixtures are byte-identical on every platform.
+* text=auto eol=lf
+*.md text eol=lf
+*.py text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+*.toml text eol=lf
+*.sh text eol=lf
