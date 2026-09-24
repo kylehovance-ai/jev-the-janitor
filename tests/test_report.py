@@ -767,3 +767,21 @@ def test_committed_demo_run_is_consistent_with_its_card_and_the_readme():
     demo_paths = {p.relative_to(DEMO).as_posix() for p in DEMO.rglob("*.md")}
     assert {r["path"] for r in rows} <= demo_paths
     assert not re.search(r"[A-Za-z]:\\\\|/Users/|/home/", (RUN_DIR / "report.html").read_text(encoding="utf-8"))
+    # the header carries the run's own time, labelled as the run, not the time the page was rendered
+    assert R.run_time(rows) == max(r["at"] for r in rows if "at" in r)
+    assert "run 2026-09-24 18:08 UTC" in page and "rendered " not in page
+
+
+# --- 0.5.1: the header time is the run's, from the rows' stamps; a stampless run says so ------------
+
+def test_header_time_is_the_runs_latest_stamp_or_says_it_is_the_render_time():
+    rows = [vote("a.md", "junk", {"junk": 0.9}), vote("b.md", "junk", {"junk": 0.9}), {"kind": "skip", "path": "c.md", "skipped": "sensitive_path"}]
+    assert R.run_time(rows) is None
+    assert R.when_label(rows).startswith("rendered ") and "no time stamps" in R.when_label(rows)
+    rows[0]["at"] = "2026-01-02T03:04:05Z"
+    rows[1]["at"] = "2026-01-02T03:59:59Z"
+    rows[2]["at"] = "2026-01-02T03:30:00Z"
+    assert R.run_time(rows) == "2026-01-02T03:59:59Z"
+    assert R.when_label(rows) == "run 2026-01-02 03:59 UTC"
+    rows[1]["at"] = "not a time"
+    assert R.when_label(rows).startswith("rendered ")

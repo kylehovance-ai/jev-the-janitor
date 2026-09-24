@@ -829,8 +829,10 @@ def section_d(D, skips):
     can.append(f"Tune <code>--sensitive-paths</code> if a withheld folder should be scanned, or a scanned one should not; the flag replaces the list, so always pass the whole list with it (<code>--sensitive-paths {esc(','.join(D['sensitive_list']))},&lt;name&gt;</code>; {list_note(D)}); the pre-flight names every folder it skips.")
     can.append("Add names and codenames to the denylist: they match whole words across line breaks and become `[NAME]`.")
     better = "Optional: read <code>--offline --json --show-payload</code> once and check the `sent.excerpt` field by eye; regexes miss things."
+    def trigger_chips(r):  # built outside the f-string: a backslash inside a replacement field is a SyntaxError before 3.12
+        return " ".join('<span class="chip small crit">' + esc(t) + "</span>" for t in (r.get("quarantine_triggers") or []))
     q_html = "".join(
-        f'<tr><td class="path">{esc(r["path"])}</td><td>{" ".join(f"<span class=\'chip small crit\'>{esc(t)}</span>" for t in (r.get("quarantine_triggers") or []))}</td><td class="why">{esc(", ".join(r.get("redacted_own") or []))}</td></tr>'
+        f'<tr><td class="path">{esc(r["path"])}</td><td>{trigger_chips(r)}</td><td class="why">{esc(", ".join(r.get("redacted_own") or []))}</td></tr>'
         for r in D["quarantined"]) or '<tr><td colspan="3" class="empty">No quarantines.</td></tr>'
     s_html = "".join(
         f'<tr><td class="path">{esc(r["path"])}</td><td><span class="chip small crit">{esc(r.get("skipped") or r.get("reason") or r.get("action"))}</span></td></tr>'
@@ -944,7 +946,7 @@ def build(rows, vault_name, out_path, journal_header=None, sensitive_list=None, 
 
     page = TEMPLATE.format(
         vault=esc(vault_name),
-        when=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+        when=when_label(rows),
         mode_chip=mode_chip, write_chip=write_chip,
         model=esc(D["model"]), taxonomy=esc(D["taxonomy"]),
         total=D["n_votes"], n_review=D["n_pile"], n_quarantine=len(D["quarantined"]), n_skipped=D["n_withheld"],
@@ -954,6 +956,24 @@ def build(rows, vault_name, out_path, journal_header=None, sensitive_list=None, 
     with open(out_path, "w", encoding="utf-8", newline="\n") as fh:
         fh.write(page)
     return out_path, D
+
+
+def run_time(rows):
+    """The run's own clock: the latest ``at`` stamp on any row (ISO 8601 UTC), or None."""
+    stamps = [r.get("at") for r in rows if isinstance(r, dict) and isinstance(r.get("at"), str)]
+    return max(stamps) if stamps else None
+
+
+def when_label(rows):
+    """'run 2026-09-24 18:08 UTC' from the rows' own stamps; the render time, labelled, when they carry none."""
+    stamp = run_time(rows)
+    if stamp:
+        try:
+            t = datetime.fromisoformat(stamp.replace("Z", "+00:00")).astimezone(timezone.utc)
+            return "run " + t.strftime("%Y-%m-%d %H:%M UTC")
+        except ValueError:
+            pass
+    return "rendered " + datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC") + " (the rows carry no time stamps)"
 
 
 TEMPLATE = r"""<!doctype html>
