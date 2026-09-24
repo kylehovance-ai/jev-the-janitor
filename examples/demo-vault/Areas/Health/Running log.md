@@ -1,0 +1,43 @@
+---
+created: 2023-09-09
+---
+- 2023-09-06: hill route, 21 min, felt good
+- 2023-10-16: hill route, 49 min, felt great
+- 2023-10-28: easy 3 km, 19 min, felt slow
+- 2023-12-14: hill route, 24 min, felt fine
+- 2024-01-19: easy 3 km, 59 min, felt fine
+- 2024-02-02: river loop, 26 min, felt great
+- 2024-02-25: intervals on the track, 46 min, felt good
+- 2024-04-25: hill route, 50 min, felt good
+- 2024-05-23: intervals on the track, 35 min, felt great
+- 2024-07-02: river loop, 61 min, felt fine
+- 2024-07-11: easy 3 km, 57 min, felt fine
+- 2024-08-28: intervals on the track, 53 min, felt heavy
+- 2024-09-02: river loop, 68 min, felt slow
+- 2024-09-27: hill route, 34 min, felt great
+- 2024-10-07: easy 3 km, 28 min, felt good
+- 2024-10-26: hill route, 36 min, felt heavy
+- 2024-11-02: river loop, 23 min, felt slow
+- 2024-11-12: hill route, 61 min, felt heavy
+- 2024-11-17: easy 3 km, 43 min, felt heavy
+- 2025-01-05: easy 3 km, 66 min, felt heavy
+- 2025-01-14: river loop, 56 min, felt good
+- 2025-05-23: intervals on the track, 20 min, felt slow
+- 2025-06-08: hill route, 23 min, felt slow
+- 2025-07-01: river loop, 41 min, felt great
+- 2025-08-28: easy 3 km, 38 min, felt slow
+- 2025-09-28: river loop, 53 min, felt fine
+- 2025-10-20: easy 3 km, 30 min, felt heavy
+- 2025-11-20: hill route, 63 min, felt slow
+- 2025-12-13: easy 3 km, 34 min, felt heavy
+- 2025-12-14: easy 3 km, 48 min, felt slow
+- 2026-03-04: intervals on the track, 66 min, felt slow
+- 2026-03-09: hill route, 68 min, felt slow
+- 2026-03-14: river loop, 57 min, felt slow
+- 2026-03-24: hill route, 43 min, felt good
+- 2026-05-09: intervals on the track, 37 min, felt slow
+- 2026-05-14: intervals on the track, 65 min, felt heavy
+- 2026-05-22: hill route, 36 min, felt slow
+- 2026-06-30: easy 3 km, 58 min, felt heavy
+- 2026-08-10: hill route, 59 min, felt heavy
+- 2026-08-24: hill route, 20 min, felt good

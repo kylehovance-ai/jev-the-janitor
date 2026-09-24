@@ -63,7 +63,7 @@ def test_frontmatter_values_never_leave_from_a_note_with_a_bom(tmp_path: Path):
     assert note.read_bytes().startswith(b"\xef\xbb\xbf---")
     rec = Recording()
     scan_vault(tmp_path, client=rec, offline=True)
-    assert rec.states[0]["frontmatter_keys"] == ["client", "janitor", "title"]
+    assert rec.states[0]["frontmatter_keys"] == ["client", "title"]  # the tool's own `janitor` key is not sent (0.5.0)
     assert "ACME-CODE-99" not in json.dumps(rec.states)
     assert "bucket" not in rec.states[0]["excerpt"]
 
@@ -353,7 +353,9 @@ def test_preflight_line_order_matches_the_readme(tmp_path: Path):
     skipped_rows = [int(n) for n in re.findall(r"^\s{4}\S+/\s+(\d+) notes {3}\S", skip_part.split("WARNING")[0], re.M)]
     assert int(skipped.group(1)) == len(skipped_rows) == 4
     assert sum(included) + sum(skipped_rows) == total
-    assert sending == sum(included)
+    # the header names what will be sent: the included notes minus those code decides locally (the bill says so)
+    bill = re.search(r"bill \(estimate\): (\d+) notes to send, \d+ served from the journal, (\d+) decided locally", block)
+    assert sending == int(bill.group(1)) and sending + int(bill.group(2)) == sum(included)
 
 
 def test_stamp_example_in_readme_has_exactly_the_keys_stamp_writes(tmp_path: Path):
@@ -615,3 +617,226 @@ def test_hidden_notes_are_never_opened_and_sensitive_ones_only_under_the_flag(tm
     rows = {r["path"]: r for r in scan_vault(tmp_path, client=FixtureClient(), offline=True, include_sensitive=True)}
     assert rows["family/f.md"].get("findings") == ["undecodable"]  # opened now, and found unreadable
     assert rows.get(".trash/h.md", {}).get("findings") is None  # still never opened
+
+
+# --- 0.5.0 round 3: a cold review's findings, each reproduced on 0.4.10 before it was fixed --------
+
+def test_a_denylisted_name_matches_across_hyphens_and_underscores_in_paths_and_wikilinks(tmp_path: Path):
+    """#1. Through 0.4.10 `jane-doe.md`, `Jane_Doe.md` and `[[jane-doe]]` left as written while the
+    title read [NAME]. The residual, `JaneDoe` run together, is documented and pinned below."""
+    NL = chr(10)
+    (tmp_path / "jane-doe.md").write_text("# T1" + NL + NL + "see [[jane-doe]] and [[Jane_Doe]] and JaneDoe" + NL, encoding="utf-8")
+    (tmp_path / "Jane_Doe.md").write_text("# T2" + NL + NL + "another body" + NL, encoding="utf-8")
+    rec = Recording()
+    scan_vault(tmp_path, client=rec, offline=True, denylist=["Jane Doe"])
+    paths = sorted(s["path"] for s in rec.states)
+    assert paths == ["[NAME].md", "[NAME].md"]
+    excerpt = next(s for s in rec.states if s["title"] == "T1")["excerpt"]
+    assert "[[[NAME]]] and [[[NAME]]]" in excerpt
+    assert "JaneDoe" in excerpt  # the documented residual: no separator, no match
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "run together with no separator" in readme
+
+
+def test_an_apply_run_does_not_invalidate_its_own_cache(tmp_path: Path, monkeypatch, capsys):
+    """#2. Stamping adds a `janitor` key; it is the tool's own and is not sent, so --resume after
+    --apply serves every note."""
+    from janitor import cli
+
+    vault = tmp_path / "v"
+    vault.mkdir()
+    for i in range(6):
+        (vault / f"n{i}.md").write_text(f"# N{i}\n\nbody {i}\n", encoding="utf-8")
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "cache"))
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    assert cli.main([str(vault), "--offline", "--no-config", "--apply", "--yes"]) == 0
+    capsys.readouterr()
+    assert cli.main([str(vault), "--offline", "--no-config", "--resume"]) == 0
+    err = capsys.readouterr().err
+    assert "6 already voted and unchanged: served from the journal, not sent" in err
+    assert "0 new or changed: will be sent" in err
+
+
+def test_denylist_entries_apply_longest_first():
+    """#3."""
+    assert redact("met Jane Doe today", ["Jane", "Jane Doe"]).text == "met [NAME] today"
+    assert redact("Acme Robotics Ltd", ["Acme", "Acme Robotics Ltd"]).text == "[NAME]"
+    assert redact("met Jane today", ["Jane", "Jane Doe"]).text == "met [NAME] today"
+
+
+def test_a_served_row_names_the_note_it_is_served_to(tmp_path: Path, monkeypatch, capsys):
+    """#4. Two notes whose redacted states are identical share a key. On --resume each row must
+    name its own path, and under --apply each file gets a row that names it."""
+    from janitor import cli
+
+    vault = tmp_path / "v"
+    vault.mkdir()
+    # the bodies differ (so neither is an exact duplicate), but redaction makes them identical
+    (vault / "call 555-123-4567.md").write_text("# call\n\nring 555-123-4567 tomorrow\n", encoding="utf-8")
+    (vault / "call 555-987-6543.md").write_text("# call\n\nring 555-987-6543 tomorrow\n", encoding="utf-8")
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "cache"))
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    assert cli.main([str(vault), "--offline", "--no-config", "--json"]) == 0
+    first = json.loads(capsys.readouterr().out)
+    keys = {r["key"] for r in first if r.get("kind") == "vote"}
+    assert len(keys) == 1
+    assert cli.main([str(vault), "--offline", "--no-config", "--resume", "--apply", "--json"]) == 0
+    rows = [r for r in json.loads(capsys.readouterr().out) if r.get("kind") == "vote"]
+    assert sorted(r["path"] for r in rows) == ["call 555-123-4567.md", "call 555-987-6543.md"]
+    assert all(r.get("cached") and r.get("applied") == "frontmatter" for r in rows)
+    for name in ("call 555-123-4567.md", "call 555-987-6543.md"):
+        assert "janitor:" in (vault / name).read_text(encoding="utf-8")
+
+
+def test_records_cache_survives_across_generations(tmp_path: Path):
+    """#5. Calls went 10, 0, 10, 0 through 0.4.10 because served rows were dropped from the cache."""
+    from janitor.records import FixtureRecordClient, judge_records
+
+    class Counting(FixtureRecordClient):
+        calls = 0
+
+        def judge(self, *a, **k):
+            Counting.calls += 1
+            return super().judge(*a, **k)
+
+    p = tmp_path / "r.jsonl"
+    p.write_text("".join(json.dumps({"id": str(i), "sent": {"t": f"idea {i}"}}) + "\n" for i in range(5)), encoding="utf-8")
+    jd = tmp_path / "j"
+    jd.mkdir()
+    counts = []
+    for _ in range(4):
+        Counting.calls = 0
+        judge_records(p, ROOT / "examples" / "triage.yaml", offline=False, client=Counting(), journal_dir=jd)
+        counts.append(Counting.calls)
+    assert counts == [5, 0, 0, 0]
+
+
+def test_one_failed_stamp_is_one_row_and_the_run_continues(tmp_path: Path, monkeypatch):
+    """#6. A header whose `janitor` value is not a mapping, and a file that cannot be replaced:
+    the vote is recorded once with applied "error: <Type>", no temp file is left, the run goes on."""
+    import os as _os
+
+    (tmp_path / "ok.md").write_text("# ok\n\nbody ok\n", encoding="utf-8")
+    (tmp_path / "locked.md").write_text("---\njanitor: locked\n---\n# locked\n\nbody locked\n", encoding="utf-8")
+    (tmp_path / "yes.md").write_text("---\njanitor: yes\n---\n# yes\n\nbody yes\n", encoding="utf-8")
+    rows = {r["path"]: r for r in scan_vault(tmp_path, client=FixtureClient(), offline=True, apply=True)}
+    assert rows["ok.md"]["applied"] == "frontmatter"
+    assert rows["locked.md"]["applied"] == "error: ValueError" and rows["yes.md"]["applied"] == "error: ValueError"
+    assert rows["locked.md"]["kind"] == "vote" and rows["locked.md"]["bucket"]
+    assert not list(tmp_path.glob("*.janitor-tmp"))
+    # a replace that fails (a file held open by a sync client on Windows): no debris, one error row
+    real_replace = _os.replace
+
+    def failing_replace(src, dst):
+        if str(dst).endswith("held.md"):
+            raise PermissionError("held open")
+        return real_replace(src, dst)
+
+    (tmp_path / "held.md").write_text("# held\n\nbody held\n", encoding="utf-8")
+    monkeypatch.setattr(_os, "replace", failing_replace)
+    rows = {r["path"]: r for r in scan_vault(tmp_path, client=FixtureClient(), offline=True, apply=True)}
+    assert rows["held.md"]["applied"] == "error: PermissionError"
+    assert not list(tmp_path.glob("*.janitor-tmp"))
+    assert (tmp_path / "held.md").read_text(encoding="utf-8") == "# held\n\nbody held\n"
+
+
+def test_402_is_a_status_not_a_substring():
+    """#8."""
+    from janitor.records import out_of_credits
+
+    class E(Exception):
+        pass
+
+    assert out_of_credits(E("timeout after 1402 ms")) is False
+    assert out_of_credits(E("HTTP 402 Payment Required")) is True
+    assert out_of_credits(E("status 402")) is True
+    assert out_of_credits(E("402: no available credits")) is True
+
+    class S(Exception):
+        status_code = 402
+
+    assert out_of_credits(S("whatever")) is True
+
+
+def test_truncated_is_computed_on_the_redacted_text(tmp_path: Path):
+    """#9. A note whose raw body is over the cap but whose redacted body is under it is not truncated."""
+    body = "# T\n\n" + ("ops@example.com " * (MAX_EXCERPT // 16 + 20))
+    (tmp_path / "a.md").write_text(body, encoding="utf-8")
+    [row] = scan_vault(tmp_path, client=FixtureClient(), offline=True)
+    assert len(body) > MAX_EXCERPT and len(redact(body).text) < MAX_EXCERPT
+    assert row["truncated"] is False
+
+
+def test_stamp_keeps_the_headers_line_ending_and_handles_a_quoted_key(tmp_path: Path):
+    """#10. An LF header stays LF when only the body holds a CRLF; a quoted "janitor": key is
+    the same key, not a second block."""
+    from janitor.apply import stamp
+    from janitor.client import Vote
+    from janitor.policy import decide
+
+    vote = Vote(bucket="reference", bucket_probabilities={"reference": 0.9}, bucket_confidence=0.9, persist=1.0, persist_confidence=0.9,
+                contains_secret=0.0, looks_like_duplicate=0.0, records_a_decision=0.0, is_actionable=0.0, safe_to_leave_in_git=0.9, model="fixture")
+    action = decide(vote)
+    lf = tmp_path / "lf.md"
+    lf.write_bytes(b"---\ntitle: T\n---\n# T\n\nline one\r\nline two\n")
+    stamp(lf, vote, action, taxonomy="abc")
+    raw = lf.read_bytes()
+    header = raw.split(b"\n---\n", 1)[0]
+    assert b"\r\n" not in header and raw.endswith(b"line one\r\nline two\n")
+    quoted = tmp_path / "q.md"
+    quoted.write_text('---\n"janitor":\n  bucket: junk\n  action: frontmatter\n---\n# Q\n\nbody\n', encoding="utf-8")
+    stamp(quoted, vote, action, taxonomy="abc")
+    text = quoted.read_text(encoding="utf-8")
+    assert text.count("janitor") == 1 and "bucket: reference" in text
+
+
+def test_preflight_header_counts_only_what_will_be_sent(tmp_path: Path):
+    """#12. Two identical notes: one is decided locally, so the header says 1 of 2, as the bill does."""
+    (tmp_path / "a.md").write_text("# a\n\nsame body\n", encoding="utf-8")
+    (tmp_path / "b.md").write_text("# b\n\nsame body\n", encoding="utf-8")
+    proc = subprocess.run([sys.executable, "-X", "utf8", "-m", "janitor.cli", str(tmp_path), "--plan", "--no-config"],
+                          capture_output=True, text=True, env={**os.environ, "TYPESAFE_API_KEY": "not-a-real-key"})
+    lines = proc.stdout.splitlines()
+    header = next(l for l in lines if l.startswith("jev-janitor pre-flight:"))
+    bill = next(l for l in lines if "bill (estimate):" in l)
+    assert header.startswith("jev-janitor pre-flight: 1 of 2 notes") and "1 notes to send" in bill
+
+
+def test_records_cli_validates_excerpt_chars_like_the_vault_cli(tmp_path: Path):
+    """#13."""
+    from janitor.records_cli import main as records_main
+
+    p = tmp_path / "r.jsonl"
+    p.write_text(json.dumps({"id": "1", "sent": {"t": "idea"}}) + "\n", encoding="utf-8")
+    for bad in ("abc", "50"):
+        with pytest.raises(SystemExit) as exc:
+            records_main([str(p), "--questions", str(ROOT / "examples" / "triage.yaml"), "--offline", "--excerpt-chars", bad])
+        assert "--excerpt-chars must be" in str(exc.value)
+
+
+def test_state_digest_watches_every_source_that_decides_what_leaves():
+    """#14."""
+    from janitor.journal import state_sources_digest
+
+    src = (ROOT / "janitor" / "journal.py").read_text(encoding="utf-8")
+    for name in ("frontmatter.note_title", "frontmatter.load_note", "frontmatter.parse_frontmatter", "frontmatter.rank_by_overlap",
+                 "frontmatter.collect_titles", "index._aliases", "index.VaultIndex.sibling_titles", "plan.plan_vault"):
+        assert f"inspect.getsource({name})" in src, name
+    assert len(state_sources_digest()) == 16
+
+
+def test_a_symlinked_note_is_written_through_not_replaced(tmp_path: Path):
+    """#15. The link stays a link; its target is stamped."""
+    target = tmp_path / "real" / "n.md"
+    target.parent.mkdir()
+    target.write_text("# N\n\nbody\n", encoding="utf-8")
+    vault = tmp_path / "v"
+    vault.mkdir()
+    link = vault / "n.md"
+    try:
+        link.symlink_to(target)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks are not permitted for this user on this platform")
+    scan_vault(vault, client=FixtureClient(), offline=True, apply=True)
+    assert link.is_symlink()
+    assert "janitor:" in target.read_text(encoding="utf-8")

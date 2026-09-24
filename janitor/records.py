@@ -72,7 +72,11 @@ def out_of_credits(exc: BaseException) -> bool:
         if getattr(exc, attr, None) == 402:
             return True
     text = str(exc)
-    return "402" in text or ("no available" in text.lower() and "credits" in text.lower())
+    # A bare "402" is not enough: "timeout after 1402 ms" is not a credits stop. The code must
+    # stand alone as a number, next to a status word or the payment wording.
+    if re.search(r"(?i)\b(?:http|status|error)\b[^\n]{0,24}?(?<![0-9])402(?![0-9])|(?<![0-9])402(?![0-9])[^\n]{0,24}?\b(?:payment|credits)", text):
+        return True
+    return "no available" in text.lower() and "credits" in text.lower()
 REVIEW_CONFIDENCE = 0.55
 SECRET_THRESHOLD = 0.7
 
@@ -326,7 +330,10 @@ def load_cache(directory: Path | None, model_requested: str) -> dict[str, dict[s
     header, rows, _ = read_journal(journals[-1])
     if (header or {}).get("model_requested") != model_requested:
         return {}
-    return {r["key"]: r for r in rows if r.get("kind") == "vote" and r.get("judge") == "jev" and r.get("key") and not r.get("cached")}
+    # A row served from the cache carries the same key and vote as the row it came from, so it
+    # keeps the cache alive; through 0.4.10 served rows were dropped and the cache lasted one
+    # generation (calls went 10, 0, 10, 0 over four runs of the same file).
+    return {r["key"]: r for r in rows if r.get("kind") == "vote" and r.get("judge") == "jev" and r.get("key")}
 
 
 def prepare_records(records: Iterable[Record], *, fingerprint: str, model_requested: str, denylist: list[str] | None,

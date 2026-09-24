@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 from janitor.bill import DEFAULT_MAX_USD, taxonomy_chars, usd
-from janitor.cli import EXIT_ERRORS, EXIT_INTERRUPTED, EXIT_REFUSED, confirm, load_denylist
+from janitor.cli import EXIT_ERRORS, EXIT_INTERRUPTED, EXIT_REFUSED, confirm, load_denylist, parse_excerpt_chars
 from janitor.frontmatter import MAX_EXCERPT
 from janitor.records import (
     FixtureRecordClient,
@@ -60,7 +60,7 @@ class RefusingRecordClient:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     live = not args.offline
-    excerpt = 0 if str(args.excerpt_chars).lower() == "full" else int(args.excerpt_chars)
+    excerpt = parse_excerpt_chars(args.excerpt_chars)  # the same rule as jev-janitor: a number of at least 200, or 'full' 
     max_usd = DEFAULT_MAX_USD if args.max_usd is None else (args.max_usd or None)
     try:
         recs = load_records(args.records, load_denylist(args.denylist))

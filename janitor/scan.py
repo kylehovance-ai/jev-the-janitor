@@ -27,6 +27,14 @@ def effective_cap(excerpt_chars: int) -> int:
     return HARD_EXCERPT_CAP if excerpt_chars <= 0 else min(excerpt_chars, HARD_EXCERPT_CAP)
 
 
+_LAST_REDACTED_LENGTH = 0
+
+
+def redacted_length() -> int:
+    """The full redacted length of the body build_state last processed, before the cut."""
+    return _LAST_REDACTED_LENGTH
+
+
 def build_state(
     note, titles: list[str], denylist: list[str] | None, rel_path: str | None = None, excerpt_chars: int = MAX_EXCERPT,
     facts: dict[str, Any] | None = None, aliases: list[str] | None = None,
@@ -60,6 +68,7 @@ def build_state(
     # straddled the cap left as a partial string with no token. A larger cap therefore means
     # more text redacted, never less.
     redacted = redact(note.body.strip(), denylist=denylist)
+    redacted_full = redacted.text
     redacted.text = redacted.text[:effective_cap(excerpt_chars)]
     title = redact(note.title, denylist=denylist)
     alias_results = [redact(a, denylist=denylist) for a in (aliases or [])]
@@ -71,7 +80,12 @@ def build_state(
     siblings = [redact(t, denylist=denylist) for t in titles]
     titles = [s.text[:MAX_TITLE_CHARS] for s in siblings]
     segments = [redact(seg, denylist=denylist) for seg in rel_path.split("/")]
-    keys = [redact(k, denylist=denylist) for k in note.keys]
+    # The tool's own `janitor` key says nothing about the note and would make every stamped
+    # note a cache miss on the next run (through 0.4.10 an --apply run invalidated its own
+    # cache: `--resume` after it re-sent every note). Every other key name is sent, redacted.
+    keys = [redact(k, denylist=denylist) for k in note.keys if k != "janitor"]
+    global _LAST_REDACTED_LENGTH
+    _LAST_REDACTED_LENGTH = len(redacted_full)
     state = {
         "title": title.text,
         "path": "/".join(s.text for s in segments),
@@ -97,6 +111,7 @@ def preflight_summary(
     excerpt_chars: int = MAX_EXCERPT,
     guard_truncated: int = 0,
     survey: int | None = None,
+    to_send: int | None = None,
 ) -> str:
     """What is about to leave the machine, folder by folder, before it does. Under --survey
     the header names the sample: through 0.4.7 it said every scanned note would be sent
@@ -107,7 +122,10 @@ def preflight_summary(
     skipped_by = Counter((e.folder, e.rule) for e in skipped)
 
     where = "will be sent to TypeSafe" if live else "will be judged by the offline fixture client (nothing leaves the machine)"
-    sending = len(to_scan) - cached
+    # The header names what will be sent. Through 0.4.10 it was the scan count minus the cache,
+    # which counted local decisions, locked, undecodable and unreadable notes as "sent": the
+    # README's own example read 25 against the bill's 24. The bill's to_send is the number.
+    sending = to_send if to_send is not None else len(to_scan) - cached
     served = f" ({cached} served from the journal, not sent)" if cached else ""
     if survey is not None:
         sending, served = survey, f" (a survey sample; the other {len(to_scan) - cached - survey} eligible notes are not sent){served}"
@@ -246,7 +264,10 @@ def prepare_vault(
                 facts=index.facts(entry.rel), aliases=ix.aliases,
             )
             item.title = note.title
-            item.truncated = len(note.body.strip()) > effective_cap(excerpt_chars)
+            # The excerpt is the REDACTED text cut at the cap, so that is the length that counts;
+            # through 0.4.10 the raw length was compared, so a note whose redactions shrank it
+            # under the cap read as truncated.
+            item.truncated = redacted_length() > effective_cap(excerpt_chars)
             item.guard_truncated = excerpt_chars <= 0 and item.truncated
             item.key = cache_key(item.state, fingerprint, model_requested)
             item.locked = ix.locked
@@ -476,7 +497,15 @@ def run_prepared(
             # applied=None: the vote was billed and is recorded, and --resume applies it from
             # the row. The residual is a Ctrl-C in the instant between this stamp and its row,
             # in this one thread: at most one file, and the README says so.
-            applied = apply_item(item, vote, action)
+            try:
+                applied = apply_item(item, vote, action)
+            except Exception as exc:  # noqa: BLE001 - one note's file, not the run
+                # A file held open by a sync client, a header whose `janitor:` value is not a
+                # mapping: the vote is recorded once, the row says the write failed, and the
+                # run goes on. Through 0.4.10 the exception killed the run and every billed
+                # vote in flight lost its row.
+                applied = f"error: {type(exc).__name__}"
+                state["apply_errors"] = state.get("apply_errors", 0) + 1
         emit(_vote_row(item, vote, action, applied, fingerprint, started, payload=payload))
         if item.local is None and vote.input_tokens:
             state["tokens"] += vote.input_tokens
@@ -486,11 +515,22 @@ def run_prepared(
 
     def serve_cached(item: Prepared) -> None:
         row = dict(item.cached_row or {})
-        row.update({"cached": True, "at": now(), "ms": 0, "exact_duplicate_of": item.exact_duplicate_of})
+        # Two notes whose redacted states are identical share a key; through 0.4.10 both were
+        # served the first one's row, path included, so the journal named one note twice and
+        # the other never. Everything that identifies THIS note comes from this item.
+        row.update({"cached": True, "at": now(), "ms": 0, "path": item.rel, "exact_duplicate_of": item.exact_duplicate_of,
+                    "title_sent": (item.state or {}).get("title", ""),
+                    "sibling_titles_sent": len((item.state or {}).get("other_note_titles", [])),
+                    "redacted": list(item.hits), "redacted_own": list(item.own_hits),
+                    "truncated": item.truncated, "frontmatter_error": item.frontmatter_error, "age_source": item.age_source})
         if apply and row.get("applied") is None:
             # The cached run was a dry run; this one applies. Rebuild the vote from the row.
             vote = _vote_from_row(row)
-            row["applied"] = apply_item(item, vote, call_decide(item, vote))
+            try:
+                row["applied"] = apply_item(item, vote, call_decide(item, vote))
+            except Exception as exc:  # noqa: BLE001 - one note's file, not the run
+                row["applied"] = f"error: {type(exc).__name__}"
+                state["apply_errors"] = state.get("apply_errors", 0) + 1
         emit(row)
 
     def serve(item: Prepared) -> None:

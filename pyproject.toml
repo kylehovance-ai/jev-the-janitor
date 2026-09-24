@@ -1,6 +1,6 @@
 [project]
 name = "jev-the-janitor"
-version = "0.4.10"
+version = "0.5.0"
 description = "A janitor for markdown vaults, powered by TypeSafe Jev. Jev votes, your code files, you review the low-confidence pile."
 readme = "README.md"
 requires-python = ">=3.11"

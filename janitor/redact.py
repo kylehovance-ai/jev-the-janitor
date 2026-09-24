@@ -336,7 +336,9 @@ def _apply_patterns(text: str) -> tuple[str, list[str]]:
 
 def redact(text: str, denylist: list[str] | None = None) -> RedactionResult:
     out, hits = _apply_patterns(text)
-    for name in denylist or []:
+    # Longest entry first: with `Jane` and `Jane Doe` both listed, `Jane` used to win and leave
+    # `[NAME] Doe`; `Acme` before `Acme Robotics Ltd` left `Robotics Ltd`. Ties keep the order given.
+    for name in sorted(denylist or [], key=lambda n: -len(n.strip())):
         for pat in denylist_patterns(name):
             if pat.search(out):
                 hits.append("NAME")
@@ -358,9 +360,13 @@ def denylist_patterns(name: str) -> tuple[re.Pattern[str], ...]:
 
     Whole-word: "Ann" must not turn "Anniversary" into "[NAME]iversary". Lookarounds rather
     than \b so a name that starts or ends with punctuation still matches at a word edge. A
-    multi-word entry matches across any run of whitespace, a newline included, because
-    hard-wrapped markdown puts "Jane" at the end of one line and "Doe" at the start of the
-    next (through 0.4.6 only the exact spacing matched). An entry that itself holds
+    multi-word entry matches across any run of whitespace, hyphens or underscores: a newline,
+    because hard-wrapped markdown puts "Jane" at the end of one line and "Doe" at the start
+    of the next (through 0.4.6 only the exact spacing matched), and `jane-doe.md`,
+    `Jane_Doe.md` or `[[jane-doe]]`, because that is how the name reaches a filename and a
+    wikilink (through 0.4.10 those left as written while the title read [NAME]). The
+    residual is a name run together with no separator, `JaneDoe`: no rule tells it from a
+    word, so it is not matched; add it to the denylist as its own entry if it occurs. An entry that itself holds
     something the patterns rewrite (`Jane Doe <jane@example.com>`) is also matched in its
     own redacted form (`Jane Doe <[EMAIL]>`), because the patterns run first and would
     otherwise leave `Jane Doe <` behind; a form that is nothing but tokens is not used.
@@ -373,7 +379,7 @@ def denylist_patterns(name: str) -> tuple[re.Pattern[str], ...]:
     if redacted != name and len(_TOKEN.sub("", redacted).strip()) >= MIN_DENYLIST_CHARS:
         forms.append(redacted)
     return tuple(
-        re.compile(r"(?<![A-Za-z0-9])" + r"\s+".join(re.escape(w) for w in form.split()) + r"(?![A-Za-z0-9])", re.IGNORECASE)
+        re.compile(r"(?<![A-Za-z0-9])" + r"[\s_\-]+".join(re.escape(w) for w in form.split()) + r"(?![A-Za-z0-9])", re.IGNORECASE)
         for form in forms
     )
 

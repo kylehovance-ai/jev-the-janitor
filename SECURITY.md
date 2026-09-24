@@ -146,7 +146,7 @@ must never leave.
 
 `--apply` generates the `janitor:` frontmatter block only; every other header line and
 the whole body are spliced back byte-for-byte via a temp file and atomic replace. It never deletes. Quarantine moves a
-note unchanged to `_janitor/quarantine/<its vault-relative path>`, writes a `.gitignore`
+note, its body byte-for-byte unchanged and its `janitor:` block stamped with the reason, to `_janitor/quarantine/<its vault-relative path>`, writes a `.gitignore`
 containing `*` into that folder on the first move, and appends a line per move to
 `_janitor/quarantine/manifest.jsonl` (original path, destination, reason, time). The
 ignore rule keeps the moved note out of a future commit; it does not remove the note's

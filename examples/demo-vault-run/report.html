@@ -1,0 +1,2286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Janitor Run Report</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<style>
+:root{
+  --ground:#F2F5F6; --surface:#FFFFFF; --sunk:#E7ECEE;
+  --ink:#13191C; --ink-soft:#4F5C63; --ink-faint:#7C8990; --rule:#D5DDE0;
+  --accent:#0F5468; --accent-soft:#DCEAEE;
+  --ok:#2C6E49; --ok-soft:#DDEDE3;
+  --warn:#8A5A12; --warn-soft:#F6EBD6;
+  --crit:#9E4029; --crit-soft:#F4E2DC;
+  --shadow:0 1px 2px rgba(19,25,28,.06);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#0E1315; --surface:#161E21; --sunk:#1D272B;
+    --ink:#E4ECEF; --ink-soft:#A3B1B7; --ink-faint:#7A888E; --rule:#2A363B;
+    --accent:#6FB8CE; --accent-soft:#12303A;
+    --ok:#7FC49B; --ok-soft:#16301F;
+    --warn:#D9AC63; --warn-soft:#332713;
+    --crit:#E08A6E; --crit-soft:#3A211A;
+    --shadow:0 1px 2px rgba(0,0,0,.4);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0E1315; --surface:#161E21; --sunk:#1D272B;
+  --ink:#E4ECEF; --ink-soft:#A3B1B7; --ink-faint:#7A888E; --rule:#2A363B;
+  --accent:#6FB8CE; --accent-soft:#12303A;
+  --ok:#7FC49B; --ok-soft:#16301F;
+  --warn:#D9AC63; --warn-soft:#332713;
+  --crit:#E08A6E; --crit-soft:#3A211A;
+  --shadow:0 1px 2px rgba(0,0,0,.4);
+}
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--ground);color:var(--ink);
+  font-family:"Source Serif 4",Georgia,serif;font-size:16px;line-height:1.6;
+}
+.wrap{max-width:1060px;margin:0 auto;padding:0 16px 90px}
+header.top{padding:46px 0 22px;border-bottom:1px solid var(--rule);margin-bottom:30px}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--ink-faint);margin:0 0 12px}
+h1{font-family:Archivo,sans-serif;font-weight:700;font-size:clamp(28px,4.4vw,38px);
+  line-height:1.06;letter-spacing:-.02em;margin:0 0 14px;text-wrap:balance}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+.chip{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.04em;
+  padding:4px 9px;border-radius:3px;background:var(--sunk);color:var(--ink-soft);white-space:nowrap}
+.chip.small{font-size:10px;padding:2px 6px}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.warn{background:var(--warn-soft);color:var(--warn)}
+.chip.crit{background:var(--crit-soft);color:var(--crit)}
+.chip.live{background:var(--crit-soft);color:var(--crit)}
+.meta{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--ink-faint);
+  margin-top:14px;line-height:1.9}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin:0 0 34px}
+.tile{background:var(--surface);border-radius:5px;padding:16px 18px;box-shadow:var(--shadow)}
+.tile .n{font-family:Archivo,sans-serif;font-weight:700;font-size:30px;line-height:1;
+  letter-spacing:-.02em;font-variant-numeric:tabular-nums;display:block}
+.tile .k{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--ink-faint);display:block;margin-top:8px}
+.tile.flag .n{color:var(--warn)}
+.tile.stop .n{color:var(--crit)}
+section{margin:0 0 40px}
+h2{font-family:Archivo,sans-serif;font-weight:600;font-size:20px;letter-spacing:-.01em;margin:0 0 10px}
+h3{font-family:Archivo,sans-serif;font-weight:600;font-size:15px;margin:22px 0 8px}
+.dek{color:var(--ink-faint);font-size:14.5px;margin:0 0 18px;max-width:70ch}
+.lede{font-size:17px;line-height:1.65;max-width:78ch;background:var(--surface);border-radius:5px;padding:18px 20px;box-shadow:var(--shadow)}
+.explain{background:var(--surface);border-radius:5px;box-shadow:var(--shadow);margin:0 0 18px;padding:6px 20px}
+.ex{display:grid;grid-template-columns:190px 1fr;gap:14px;padding:12px 0;border-bottom:1px solid var(--rule);font-size:14.5px;line-height:1.55}
+.ex:last-child{border-bottom:none}
+@media (max-width:680px){.ex{grid-template-columns:1fr}}
+.exk{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-faint);padding-top:3px}
+.exv ul{margin:0;padding-left:18px}
+.exv li{margin:0 0 6px}
+.exv q{font-style:italic;color:var(--ink-soft)}
+.exv code{font-family:"IBM Plex Mono",monospace;font-size:12.5px;background:var(--sunk);padding:1px 5px;border-radius:3px}
+.bars{background:var(--surface);border-radius:5px;padding:18px 20px;box-shadow:var(--shadow);display:grid;gap:11px}
+.barrow{display:grid;grid-template-columns:230px 1fr 40px;gap:14px;align-items:center}
+@media (max-width:680px){.barrow{grid-template-columns:1fr 1fr 34px}}
+.barlabel{display:flex;flex-direction:column;line-height:1.3}
+.bname{font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink)}
+.bnote{font-size:11.5px;color:var(--ink-faint)}
+.bartrack{background:var(--sunk);border-radius:3px;height:14px;overflow:hidden}
+.barfill{background:var(--accent);height:100%;border-radius:0 3px 3px 0;min-width:2px}
+.barval{font-family:"IBM Plex Mono",monospace;font-size:13px;text-align:right;font-variant-numeric:tabular-nums;color:var(--ink-soft)}
+.tablewrap{overflow-x:auto;background:var(--surface);border-radius:5px;box-shadow:var(--shadow)}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--ink-faint);text-align:left;font-weight:400;
+  padding:11px 14px;border-bottom:1px solid var(--rule);white-space:nowrap}
+td{padding:10px 14px;border-bottom:1px solid var(--rule);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--sunk)}
+.path{font-family:"IBM Plex Mono",monospace;font-size:12.5px;max-width:330px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bucket{font-family:"IBM Plex Mono",monospace;font-size:11.5px;background:var(--accent-soft);color:var(--accent);padding:3px 7px;border-radius:3px;white-space:nowrap}
+.num{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;font-size:12.5px;color:var(--ink-soft);white-space:nowrap}
+.conf{min-width:118px}
+.cnum{display:inline-block;width:34px}
+.ctrack{display:inline-block;width:56px;height:6px;background:var(--sunk);border-radius:3px;overflow:hidden;vertical-align:middle;margin-left:6px}
+.cbar{display:block;height:100%;background:var(--accent);border-radius:0 3px 3px 0}
+.cbar.low{background:var(--warn)}
+.persist{font-size:12.5px;color:var(--ink-soft);white-space:nowrap}
+.why{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--ink-faint)}
+.flags{white-space:nowrap}
+.empty{color:var(--ink-faint);font-style:italic;padding:18px 14px}
+.muted{color:var(--ink-faint)}
+footer{margin-top:50px;padding-top:20px;border-top:1px solid var(--rule);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);line-height:1.85}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <p class="eyebrow">jev-janitor · run report</p>
+  <h1>demo-vault</h1>
+  <div class="chips"><span class="chip live">LIVE — votes from Jev. Excerpts were sent to TypeSafe.</span><span class="chip ok">DRY RUN — nothing on disk was changed</span></div>
+  <p class="meta">
+    2026-09-24 18:20 UTC &nbsp;·&nbsp; model <strong>jev-1.13.0</strong> &nbsp;·&nbsp; taxonomy fingerprint <strong>be00a24c7a68</strong><br>
+    The fingerprint identifies the exact wording that produced these votes. Change the taxonomy and these numbers stop being comparable.
+  </p>
+</header>
+
+<div class="tiles">
+  <div class="tile"><span class="n">235</span><span class="k">notes decided</span></div>
+  <div class="tile flag"><span class="n">27</span><span class="k">need review &lt; 0.55</span></div>
+  <div class="tile stop"><span class="n">1</span><span class="k">quarantined</span></div>
+  <div class="tile"><span class="n">16</span><span class="k">withheld</span></div>
+  <div class="tile"><span class="n">6</span><span class="k">notes redacted</span></div>
+  <div class="tile"><span class="n">5</span><span class="k">exact duplicates</span></div>
+  <div class="tile stop"><span class="n">0</span><span class="k">errors</span></div>
+  <div class="tile"><span class="n">$0.0147</span><span class="k">measured cost</span></div>
+</div>
+
+<section id='summary'><h2>Summary</h2><p class='lede'><strong>235 notes</strong> got a decision: 229 judged by jev-1.13.0, 6 decided locally, 16 withheld, 0 errored. The run cost <strong>$0.0147</strong> for 350,181 input tokens, at 2.18 characters per token (below the 2.8–3.8 range the estimate assumes). <strong>`log_entry` holds 53%</strong> of judged notes, and 2 folder(s) hold 80% of it: this vault is mostly a dated run report or snapshot. <strong>27 notes (12%) need a human</strong>, led by a tie between the categories `ephemeral` and `log_entry` (7 notes). The one thing to do first, because it has the largest effect on the list (17 notes would clear if the split holds, an estimate): Edit the taxonomy so `durable_memory` and `ephemeral` say how they differ, or merge them.</p></section><section id='pile'><h2>What needs a human</h2><div class="explain"><div class="ex"><span class="exk">What this shows</span><div class="exv">Under 0.55 Jev split its vote, most often between two buckets (median gap between the top two 0.16 here, against 0.90 for the rest), so a person should pick. 27 of 229 judged notes (12%) landed here. A confident vote is Jev's best reading, not proof: spot-check 20 random confident notes (listed at the end of this section) before trusting the rest.</div></div><div class="ex"><span class="exk">What we found in your vault</span><div class="exv"><ul><li><strong>Two-bucket ties:</strong> the top 3 pairs hold 67% of the pile: `ephemeral`–`log_entry` 7, `durable_memory`–`project_decision` 6, `durable_memory`–`ephemeral` 5.</li><li><strong>`needs_review` pull:</strong> 0 explicit votes and 1 with it as runner-up, 4% of the pile.</li><li><strong>Hot folders:</strong> none by the 1.5× rule (at least 20 judged notes). The biggest folder, <code>Daily</code>, sits at 7% against 15% for the rest.</li><li><strong>Truncation:</strong> 0% of the pile was cut at the excerpt cap against 1% of all judged notes: not a cause (rule: pile share ≥ 1.5× overall and at least 10 notes).</li><li><strong>Short notes</strong> (under 50 words): 70% of the pile against 79% overall: not a cause.</li><li><strong>Unexplained:</strong> 8 pile notes match none of these rules. They are marked <em>unexplained</em> in the table below; spot-check them, because an unexplained remainder is information: if they share a folder or a shape, that is the next rule.</li></ul></div></div><div class="ex"><span class="exk">Why</span><div class="exv">The taxonomy fit: <strong>the buckets overlap for this kind of material</strong> (rule: at least 50% of the pile in the top 3 pairs; here 67%). A missing or overlapping bucket shows up as exactly this: a low-confidence spread between two sentences that both fit. Confidence tracks the top bucket's probability (median gap 0.02 here), so a note clears the floor when one sentence wins outright.</div></div><div class="ex"><span class="exk">What you can do</span><div class="exv"><ul><li><strong>Tie `durable_memory`–`ephemeral` (5 notes):</strong> edit the two sentences in <code>janitor/taxonomies/vault_memory.yaml</code> so they say how they differ, or merge them. `durable_memory`: <q>A standing fact worth keeping across sessions, still true and useful next month.</q> `ephemeral`: <q>Scratch, chat debris, a mood, or a thought that should expire.</q> If Jev splits its vote the same way under the edited taxonomy, about <strong>17 of 27</strong> would clear (an estimate from this run's own probabilities, not a bound); only a rerun confirms it.</li><li><strong>Tie `ephemeral`–`log_entry` (7 notes):</strong> edit the two sentences in <code>janitor/taxonomies/vault_memory.yaml</code> so they say how they differ, or merge them. `ephemeral`: <q>Scratch, chat debris, a mood, or a thought that should expire.</q> `log_entry`: <q>A dated run report, scan, digest, or snapshot, produced routinely or automatically. Kept as a record of what happened that day, not as a standing fact and not as a decision.</q> If Jev splits its vote the same way under the edited taxonomy, about <strong>15 of 27</strong> would clear (an estimate from this run's own probabilities, not a bound); only a rerun confirms it.</li><li><strong>Tie `durable_memory`–`project_decision` (6 notes):</strong> edit the two sentences in <code>janitor/taxonomies/vault_memory.yaml</code> so they say how they differ, or merge them. `durable_memory`: <q>A standing fact worth keeping across sessions, still true and useful next month.</q> `project_decision`: <q>A dated choice that future work on the project must honor.</q> If Jev splits its vote the same way under the edited taxonomy, about <strong>12 of 27</strong> would clear (an estimate from this run's own probabilities, not a bound); only a rerun confirms it.</li><li><strong>Jev abstaining into `needs_review` (1 notes):</strong> `needs_review` is not a category, it is Jev declining to choose, so a split with it is not two overlapping sentences. Reword the sentence so it is a last resort, not a peer of the other buckets. Today it reads: <q>Not enough signal to say. A human should look.</q></li><li><strong>The cost of any taxonomy edit:</strong> Any taxonomy edit changes the fingerprint, so every cache key misses and the next scan is the whole vault at full price: <strong>$0.0147</strong> at this run's measured rate. If a pile-only rescan existed (logged as <code>--only-pile</code>, not built) it would be $0.0009 to $0.0012 by the bill's range, $0.0015 at the measured rate.</li></ul></div></div><div class="ex"><span class="exk">What would make it better</span><div class="exv">Optional, logged and not built: a rescan of just the pile under an edited taxonomy would confirm a what-if at the pile-only price (<code>--only-pile</code>); path rules in <code>janitor.toml</code> would decide machine-generated folders locally without withholding them by name; and when several hot folders share a <code>&lt;parent&gt;/*/&lt;leaf&gt;</code> pattern, naming the pattern is where such a rule would apply.</div></div></div><div class="tablewrap"><table><thead><tr><th>note</th><th>bucket</th><th>confidence</th><th>margin</th><th>runner-up</th><th>cause</th></tr></thead><tbody>
+        <tr>
+          <td class="path">Resources/How-to/Measure the field.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.28</span><span class="ctrack"><span class="cbar low" style="width:28.0%"></span></span></td>
+          <td class="num">0.03</td>
+          <td class="why">ephemeral at 0.35</td>
+          <td class="why"><span class="chip small">tie durable_memory–ephemeral</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2023-12-12.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.29</span><span class="ctrack"><span class="cbar low" style="width:29.0%"></span></span></td>
+          <td class="num">0.16</td>
+          <td class="why">junk at 0.23</td>
+          <td class="why"><span class="chip small">unexplained</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/clipping 2.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.34</span><span class="ctrack"><span class="cbar low" style="width:34.0%"></span></span></td>
+          <td class="num">0.10</td>
+          <td class="why">ephemeral at 0.32</td>
+          <td class="why"><span class="chip small">tie durable_memory–ephemeral</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/Books/The Budget Book.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.35</span><span class="ctrack"><span class="cbar low" style="width:35.0%"></span></span></td>
+          <td class="num">0.03</td>
+          <td class="why">ephemeral at 0.40</td>
+          <td class="why"><span class="chip small">tie durable_memory–ephemeral</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Novel Draft/Chapter one opening.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.37</span><span class="ctrack"><span class="cbar low" style="width:37.0%"></span></span></td>
+          <td class="num">0.14</td>
+          <td class="why">ephemeral at 0.30</td>
+          <td class="why"><span class="chip small">tie durable_memory–ephemeral</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/Articles/Postgres vacuum for the rest of us.md</td>
+          <td><span class="bucket">code_note</span></td>
+          <td class="num conf"><span class="cnum">0.40</span><span class="ctrack"><span class="cbar low" style="width:40.0%"></span></span></td>
+          <td class="num">0.10</td>
+          <td class="why">durable_memory at 0.38</td>
+          <td class="why"><span class="chip small">unexplained</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-01-03.md</td>
+          <td><span class="bucket">ephemeral</span></td>
+          <td class="num conf"><span class="cnum">0.42</span><span class="ctrack"><span class="cbar low" style="width:42.0%"></span></span></td>
+          <td class="num">0.03</td>
+          <td class="why">log_entry at 0.47</td>
+          <td class="why"><span class="chip small">tie ephemeral–log_entry</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-12-09.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.42</span><span class="ctrack"><span class="cbar low" style="width:42.0%"></span></span></td>
+          <td class="num">0.00</td>
+          <td class="why">log_entry at 0.49</td>
+          <td class="why"><span class="chip small">tie ephemeral–log_entry</span></td>
+        </tr>
+        <tr>
+          <td class="path">Archive/Old router notes.md</td>
+          <td><span class="bucket">junk</span></td>
+          <td class="num conf"><span class="cnum">0.43</span><span class="ctrack"><span class="cbar low" style="width:43.0%"></span></span></td>
+          <td class="num">0.09</td>
+          <td class="why">ephemeral at 0.42</td>
+          <td class="why"><span class="chip small">unexplained</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2024-04-17.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.43</span><span class="ctrack"><span class="cbar low" style="width:43.0%"></span></span></td>
+          <td class="num">0.00</td>
+          <td class="why">ephemeral at 0.50</td>
+          <td class="why"><span class="chip small">tie ephemeral–log_entry</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2024-11-23.md</td>
+          <td><span class="bucket">project_decision</span></td>
+          <td class="num conf"><span class="cnum">0.43</span><span class="ctrack"><span class="cbar low" style="width:43.0%"></span></span></td>
+          <td class="num">0.16</td>
+          <td class="why">ephemeral at 0.34</td>
+          <td class="why"><span class="chip small">unexplained</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-12-28.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.44</span><span class="ctrack"><span class="cbar low" style="width:44.0%"></span></span></td>
+          <td class="num">0.09</td>
+          <td class="why">ephemeral at 0.42</td>
+          <td class="why"><span class="chip small">tie ephemeral–log_entry</span></td>
+        </tr>
+        <tr>
+          <td class="path">Archive/old daily 2023-09-10.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.45</span><span class="ctrack"><span class="cbar low" style="width:45.0%"></span></span></td>
+          <td class="num">0.15</td>
+          <td class="why">project_decision at 0.37</td>
+          <td class="why"><span class="chip small">unexplained</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Novel Draft/Novel Draft.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.45</span><span class="ctrack"><span class="cbar low" style="width:45.0%"></span></span></td>
+          <td class="num">0.23</td>
+          <td class="why">project_decision at 0.29</td>
+          <td class="why"><span class="chip small">tie durable_memory–project_decision</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Novel Draft/Outline.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.46</span><span class="ctrack"><span class="cbar low" style="width:46.0%"></span></span></td>
+          <td class="num">0.13</td>
+          <td class="why">project_decision at 0.40</td>
+          <td class="why"><span class="chip small">tie durable_memory–project_decision</span></td>
+        </tr>
+        <tr>
+          <td class="path">README.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.46</span><span class="ctrack"><span class="cbar low" style="width:46.0%"></span></span></td>
+          <td class="num">0.29</td>
+          <td class="why">reference at 0.24</td>
+          <td class="why"><span class="chip small">unexplained</span></td>
+        </tr>
+        <tr>
+          <td class="path">Areas/Home/Fence line agreement.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.48</span><span class="ctrack"><span class="cbar low" style="width:48.0%"></span></span></td>
+          <td class="num">0.10</td>
+          <td class="why">project_decision at 0.45</td>
+          <td class="why"><span class="chip small">tie durable_memory–project_decision</span></td>
+        </tr>
+        <tr>
+          <td class="path">MOCs/Garden MOC.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.48</span><span class="ctrack"><span class="cbar low" style="width:48.0%"></span></span></td>
+          <td class="num">0.29</td>
+          <td class="why">project_decision at 0.25</td>
+          <td class="why"><span class="chip small">tie durable_memory–project_decision</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Home Network/wifi password card.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.48</span><span class="ctrack"><span class="cbar low" style="width:48.0%"></span></span></td>
+          <td class="num">0.20</td>
+          <td class="why">ephemeral at 0.34</td>
+          <td class="why"><span class="chip small">tie durable_memory–ephemeral</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-12-25.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.49</span><span class="ctrack"><span class="cbar low" style="width:49.0%"></span></span></td>
+          <td class="num">0.16</td>
+          <td class="why">ephemeral at 0.39</td>
+          <td class="why"><span class="chip small">tie ephemeral–log_entry</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/How-to/Tune the timer for the drip line.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.49</span><span class="ctrack"><span class="cbar low" style="width:49.0%"></span></span></td>
+          <td class="num">0.38</td>
+          <td class="why">needs_review at 0.17</td>
+          <td class="why"><span class="chip small">needs_review pull</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/Articles/VLANs for a home network.md</td>
+          <td><span class="bucket">project_decision</span></td>
+          <td class="num conf"><span class="cnum">0.50</span><span class="ctrack"><span class="cbar low" style="width:50.0%"></span></span></td>
+          <td class="num">0.16</td>
+          <td class="why">durable_memory at 0.40</td>
+          <td class="why"><span class="chip small">tie durable_memory–project_decision</span></td>
+        </tr>
+        <tr>
+          <td class="path">Meeting notes 2025-03-11.md</td>
+          <td><span class="bucket">ephemeral</span></td>
+          <td class="num conf"><span class="cnum">0.51</span><span class="ctrack"><span class="cbar low" style="width:51.0%"></span></span></td>
+          <td class="num">0.22</td>
+          <td class="why">log_entry at 0.36</td>
+          <td class="why"><span class="chip small">tie ephemeral–log_entry</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/Books/Measuring Land.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.51</span><span class="ctrack"><span class="cbar low" style="width:51.0%"></span></span></td>
+          <td class="num">0.30</td>
+          <td class="why">reference at 0.27</td>
+          <td class="why"><span class="chip small">unexplained</span></td>
+        </tr>
+        <tr>
+          <td class="path">Archive/Greenhouse budget (old).md</td>
+          <td><span class="bucket">project_decision</span></td>
+          <td class="num conf"><span class="cnum">0.53</span><span class="ctrack"><span class="cbar low" style="width:53.0%"></span></span></td>
+          <td class="num">0.39</td>
+          <td class="why">durable_memory at 0.20</td>
+          <td class="why"><span class="chip small">tie durable_memory–project_decision</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/Books/Hedges.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.53</span><span class="ctrack"><span class="cbar low" style="width:53.0%"></span></span></td>
+          <td class="num">0.23</td>
+          <td class="why">reference at 0.36</td>
+          <td class="why"><span class="chip small">unexplained</span></td>
+        </tr>
+        <tr>
+          <td class="path">Archive/Recipe attempts 2023.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.54</span><span class="ctrack"><span class="cbar low" style="width:54.0%"></span></span></td>
+          <td class="num">0.24</td>
+          <td class="why">ephemeral at 0.36</td>
+          <td class="why"><span class="chip small">tie ephemeral–log_entry</span></td>
+        </tr></tbody></table></div><h3>Spot-check: 20 confident notes, drawn at random</h3><p class='dek'>Confidence at or above 0.55 is Jev's best reading, not proof. If more than one or two of these 20 are wrong, the floor is too low for this vault; raise it in policy.py or read the pile's runner-up column with more suspicion.</p><div class="tablewrap"><table><thead><tr><th>note</th><th>bucket</th><th>confidence</th><th>margin</th></tr></thead><tbody><tr><td class="path">Daily/2024-10-20.md</td><td><span class="bucket">log_entry</span></td><td class="num conf"><span class="cnum">0.92</span><span class="ctrack"><span class="cbar" style="width:92.0%"></span></span></td><td class="num">0.88</td></tr><tr><td class="path">Resources/How-to/Reset the router to the saved config.md</td><td><span class="bucket">code_note</span></td><td class="num conf"><span class="cnum">0.99</span><span class="ctrack"><span class="cbar" style="width:99.0%"></span></span></td><td class="num">0.98</td></tr><tr><td class="path">Resources/How-to/Clear the gutters.md</td><td><span class="bucket">durable_memory</span></td><td class="num conf"><span class="cnum">0.97</span><span class="ctrack"><span class="cbar" style="width:97.0%"></span></span></td><td class="num">0.97</td></tr><tr><td class="path">Daily/2026-08-20.md</td><td><span class="bucket">ephemeral</span></td><td class="num conf"><span class="cnum">0.56</span><span class="ctrack"><span class="cbar" style="width:56.0%"></span></span></td><td class="num">0.26</td></tr><tr><td class="path">Daily/2025-12-06.md</td><td><span class="bucket">log_entry</span></td><td class="num conf"><span class="cnum">0.70</span><span class="ctrack"><span class="cbar" style="width:70.0%"></span></span></td><td class="num">0.58</td></tr><tr><td class="path">Archive/First novel attempt.md</td><td><span class="bucket">ephemeral</span></td><td class="num conf"><span class="cnum">0.66</span><span class="ctrack"><span class="cbar" style="width:66.0%"></span></span></td><td class="num">0.57</td></tr><tr><td class="path">Projects/Greenhouse Build/Contractor meeting 2.md</td><td><span class="bucket">project_decision</span></td><td class="num conf"><span class="cnum">0.89</span><span class="ctrack"><span class="cbar" style="width:89.0%"></span></span></td><td class="num">0.82</td></tr><tr><td class="path">Daily/2023-09-07.md</td><td><span class="bucket">log_entry</span></td><td class="num conf"><span class="cnum">1.00</span><span class="ctrack"><span class="cbar" style="width:100.0%"></span></span></td><td class="num">1.00</td></tr><tr><td class="path">Areas/Health/Running log.md</td><td><span class="bucket">log_entry</span></td><td class="num conf"><span class="cnum">1.00</span><span class="ctrack"><span class="cbar" style="width:100.0%"></span></span></td><td class="num">1.00</td></tr><tr><td class="path">Daily/2025-05-02.md</td><td><span class="bucket">log_entry</span></td><td class="num conf"><span class="cnum">0.89</span><span class="ctrack"><span class="cbar" style="width:89.0%"></span></span></td><td class="num">0.82</td></tr><tr><td class="path">Daily/2025-12-13.md</td><td><span class="bucket">log_entry</span></td><td class="num conf"><span class="cnum">0.70</span><span class="ctrack"><span class="cbar" style="width:70.0%"></span></span></td><td class="num">0.49</td></tr><tr><td class="path">Projects/Greenhouse Build/Greenhouse build log.md</td><td><span class="bucket">log_entry</span></td><td class="num conf"><span class="cnum">1.00</span><span class="ctrack"><span class="cbar" style="width:100.0%"></span></span></td><td class="num">1.00</td></tr><tr><td class="path">Resources/How-to/Set the vent openers.md</td><td><span class="bucket">durable_memory</span></td><td class="num conf"><span class="cnum">0.85</span><span class="ctrack"><span class="cbar" style="width:85.0%"></span></span></td><td class="num">0.79</td></tr><tr><td class="path">Projects/Sourdough/Flour decision.md</td><td><span class="bucket">project_decision</span></td><td class="num conf"><span class="cnum">0.97</span><span class="ctrack"><span class="cbar" style="width:97.0%"></span></span></td><td class="num">0.94</td></tr><tr><td class="path">Archive/old daily 2023-09-25.md</td><td><span class="bucket">log_entry</span></td><td class="num conf"><span class="cnum">0.98</span><span class="ctrack"><span class="cbar" style="width:98.0%"></span></span></td><td class="num">0.96</td></tr><tr><td class="path">Archive/old daily 2023-10-04.md</td><td><span class="bucket">log_entry</span></td><td class="num conf"><span class="cnum">0.98</span><span class="ctrack"><span class="cbar" style="width:98.0%"></span></span></td><td class="num">0.98</td></tr><tr><td class="path">Projects/Greenhouse Build/receipt 2024-01-02.md</td><td><span class="bucket">log_entry</span></td><td class="num conf"><span class="cnum">0.93</span><span class="ctrack"><span class="cbar" style="width:93.0%"></span></span></td><td class="num">0.91</td></tr><tr><td class="path">Projects/Greenhouse Build/Greenhouse site decision.md</td><td><span class="bucket">project_decision</span></td><td class="num conf"><span class="cnum">1.00</span><span class="ctrack"><span class="cbar" style="width:100.0%"></span></span></td><td class="num">1.00</td></tr><tr><td class="path">Archive/Starter care (copy).md</td><td><span class="bucket">durable_memory</span></td><td class="num conf"><span class="cnum">1.00</span><span class="ctrack"><span class="cbar" style="width:100.0%"></span></span></td><td class="num">1.00</td></tr><tr><td class="path">Daily/2025-11-16.md</td><td><span class="bucket">log_entry</span></td><td class="num conf"><span class="cnum">0.92</span><span class="ctrack"><span class="cbar" style="width:92.0%"></span></span></td><td class="num">0.86</td></tr></tbody></table></div></section><section id='landed'><h2>Where the notes landed</h2><div class="explain"><div class="ex"><span class="exk">What this shows</span><div class="exv">6 of the 8 buckets were used. A bucket nobody lands in, or one that swallows everything, is a signal about the taxonomy wording, not about the notes.</div></div><div class="ex"><span class="exk">What we found in your vault</span><div class="exv"><ul><li><strong>`log_entry` is dominant:</strong> 121 of 229 judged notes (53%; rule: more than 50%). 2 folder(s) hold 80% of it: <code>Daily</code> 87, <code>Archive</code> 12.</li><li>Those folders are 114 notes, 214,206 input tokens and <strong>$0.0090</strong> of this scan (measured).</li><li><strong>Unused buckets:</strong> `reference`, `needs_review`.</li></ul></div></div><div class="ex"><span class="exk">What you can do</span><div class="exv"><ul><li>If those folders are machine-generated (run reports, digests, task records), exclude them. <code>--sensitive-paths family,private,personal,secrets,inbox,Daily,Archive</code> withholds 2 of the 2 with no other folder affected; the 5 names before it are the list this run actually used, read from this run&#x27;s sensitive list (5 names), because the flag replaces the list rather than extending it. With all of them out, the next scan is $0.0090 cheaper and the report is about the notes you wrote. If they are yours, `log_entry` is simply what this vault is.</li><li>`reference` was the runner-up in 3 pile notes: close but losing, so its sentence is a wording problem. Sharpen it against the buckets those notes landed in.</li><li>`needs_review` unused means Jev never abstained outright; that is fine, not a wording problem (1 pile notes had it as runner-up).</li></ul></div></div><div class="ex"><span class="exk">What would make it better</span><div class="exv">Optional, logged and not built: a folder × bucket matrix would show at a glance which folders are homogeneous, and a path rule in <code>janitor.toml</code> would decide such a folder locally without withholding it by name.</div></div></div><div class="bars">
+      <div class="barrow" title="log_entry: 121 of 229 notes (53%)">
+        <div class="barlabel"><span class="bname">log_entry</span><span class="bnote">a dated run report or snapshot</span></div>
+        <div class="bartrack"><div class="barfill" style="width:100.00%"></div></div>
+        <div class="barval">121</div>
+      </div>
+      <div class="barrow" title="durable_memory: 60 of 229 notes (26%)">
+        <div class="barlabel"><span class="bname">durable_memory</span><span class="bnote">standing fact, still true next month</span></div>
+        <div class="bartrack"><div class="barfill" style="width:49.59%"></div></div>
+        <div class="barval">60</div>
+      </div>
+      <div class="barrow" title="project_decision: 17 of 229 notes (7%)">
+        <div class="barlabel"><span class="bname">project_decision</span><span class="bnote">a dated choice future work must honor</span></div>
+        <div class="bartrack"><div class="barfill" style="width:14.05%"></div></div>
+        <div class="barval">17</div>
+      </div>
+      <div class="barrow" title="ephemeral: 15 of 229 notes (7%)">
+        <div class="barlabel"><span class="bname">ephemeral</span><span class="bnote">scratch, chat debris, a mood</span></div>
+        <div class="bartrack"><div class="barfill" style="width:12.40%"></div></div>
+        <div class="barval">15</div>
+      </div>
+      <div class="barrow" title="code_note: 11 of 229 notes (5%)">
+        <div class="barlabel"><span class="bname">code_note</span><span class="bnote">implementation, command, schema, benchmark</span></div>
+        <div class="bartrack"><div class="barfill" style="width:9.09%"></div></div>
+        <div class="barval">11</div>
+      </div>
+      <div class="barrow" title="junk: 5 of 229 notes (2%)">
+        <div class="barlabel"><span class="bname">junk</span><span class="bnote">empty, boilerplate, noise</span></div>
+        <div class="bartrack"><div class="barfill" style="width:4.13%"></div></div>
+        <div class="barval">5</div>
+      </div></div></section><section id='membrane'><h2>The membrane</h2><div class="explain"><div class="ex"><span class="exk">What this shows</span><div class="exv">What the run refused to send, which redaction patterns fired on what it did send, and which notes were quarantined. Values never appear here, only labels and counts.</div></div><div class="ex"><span class="exk">What we found in your vault</span><div class="exv"><ul><li><strong>Withheld:</strong> sensitive_path 16 (16 notes never read for a live call).</li><li><strong>Decided locally without a call:</strong> exact duplicate 5, local redaction hit 1.</li><li><strong>Redaction hits by label:</strong> [EMAIL] 3, [PHONE] 3, [URL_CREDENTIAL] 1 (6 notes carried at least one).</li><li><strong>Quarantines by trigger:</strong> local:URL_CREDENTIAL 1 (1 notes).</li><li><strong>Exact duplicates:</strong> 5 notes are byte-identical to an earlier one.</li></ul></div></div><div class="ex"><span class="exk">Why</span><div class="exv">Withheld notes matched a sensitive folder name; local decisions cost nothing and are never served from cache. Two kinds of quarantine: <strong>1 on a local hit</strong> (a machine-checkable credential format in the note's own title, aliases, path, key names or body, decided before any vote; trigger <code>local:…</code>) and <strong>0 on Jev's vote</strong> (<code>contains_secret</code> at or above 0.7, decided after the vote).</div></div><div class="ex"><span class="exk">What you can do</span><div class="exv"><ul><li><strong>Local hits (1): a credential-shaped string sat in the note. If it is real, rotate it.</strong> The token names the format, so you know which system's key to rotate; documentation examples such as AWS's <code>…EXAMPLEKEY</code> are common and are not real. Under <code>--apply</code> the note moves to <code>_janitor/quarantine/</code>, git-ignored.</li><li>Tune <code>--sensitive-paths</code> if a withheld folder should be scanned, or a scanned one should not; the flag replaces the list, so always pass the whole list with it (<code>--sensitive-paths family,private,personal,secrets,inbox,&lt;name&gt;</code>; the 5 names before it are the list this run actually used, read from this run&#x27;s sensitive list (5 names), because the flag replaces the list rather than extending it); the pre-flight names every folder it skips.</li><li>Add names and codenames to the denylist: they match whole words across line breaks and become `[NAME]`.</li></ul></div></div><div class="ex"><span class="exk">What would make it better</span><div class="exv">Optional: read <code>--offline --json --show-payload</code> once and check the `sent.excerpt` field by eye; regexes miss things.</div></div></div><h3>Quarantined</h3><div class="tablewrap"><table><thead><tr><th>note</th><th>trigger</th><th>own hits</th></tr></thead><tbody><tr><td class="path">Projects/Home Network/Sensor database.md</td><td><span class='chip small crit'>local:URL_CREDENTIAL</span></td><td class="why">URL_CREDENTIAL</td></tr></tbody></table></div><h3>Withheld</h3><div class="tablewrap"><table><thead><tr><th>withheld note</th><th>rule</th></tr></thead><tbody><tr><td class="path">Inbox/inbox 1.md</td><td><span class="chip small crit">sensitive_path</span></td></tr><tr><td class="path">Inbox/inbox 10.md</td><td><span class="chip small crit">sensitive_path</span></td></tr><tr><td class="path">Inbox/inbox 2.md</td><td><span class="chip small crit">sensitive_path</span></td></tr><tr><td class="path">Inbox/inbox 3.md</td><td><span class="chip small crit">sensitive_path</span></td></tr><tr><td class="path">Inbox/inbox 4.md</td><td><span class="chip small crit">sensitive_path</span></td></tr><tr><td class="path">Inbox/inbox 5.md</td><td><span class="chip small crit">sensitive_path</span></td></tr><tr><td class="path">Inbox/inbox 6.md</td><td><span class="chip small crit">sensitive_path</span></td></tr><tr><td class="path">Inbox/inbox 7.md</td><td><span class="chip small crit">sensitive_path</span></td></tr><tr><td class="path">Inbox/inbox 8.md</td><td><span class="chip small crit">sensitive_path</span></td></tr><tr><td class="path">Inbox/inbox 9.md</td><td><span class="chip small crit">sensitive_path</span></td></tr><tr><td class="path">personal/Contacts.md</td><td><span class="chip small crit">sensitive_path</span></td></tr><tr><td class="path">personal/Gift ideas.md</td><td><span class="chip small crit">sensitive_path</span></td></tr><tr><td class="path">personal/Journal 2024-02.md</td><td><span class="chip small crit">sensitive_path</span></td></tr><tr><td class="path">personal/Journal 2025-06.md</td><td><span class="chip small crit">sensitive_path</span></td></tr><tr><td class="path">personal/Medical.md</td><td><span class="chip small crit">sensitive_path</span></td></tr><tr><td class="path">personal/Wishlist.md</td><td><span class="chip small crit">sensitive_path</span></td></tr></tbody></table></div></section><section id='errors'><h2>Errors</h2><div class="explain"><div class="ex"><span class="exk">What this shows</span><div class="exv">Notes whose call failed, by exception class. An error row has no vote; the note is held, not decided.</div></div><div class="ex"><span class="exk">What we found in your vault</span><div class="exv"><ul><li>No errors.</li></ul></div></div></div></section><section id='cost'><h2>Cost and measurement</h2><div class="explain"><div class="ex"><span class="exk">What this shows</span><div class="exv">What this run cost, and how the API's own token count compares with the 3.8 down to 2.8 characters-per-token range the pre-flight estimate assumes.</div></div><div class="ex"><span class="exk">What we found in your vault</span><div class="exv"><ul><li><strong>$0.0147</strong> for 350,181 input tokens over 229 calls at $0.042 per million (input only: one invoice check put any output-token charge under about $0.005 per million).</li><li><strong>Measured: 2.18 characters per token</strong> (285,007 payload characters plus 2,086 question characters per call, over the tokens the API counted), <strong>below</strong> the assumed range. The pre-flight would have estimated $0.0084 to $0.0114 for this payload.</li></ul></div></div><div class="ex"><span class="exk">Why</span><div class="exv">This vault tokenizes more densely than prose (logs, ids, code), so the pessimistic end of the estimate was light by 29%; the spend meter is what protects the bill on a vault like this.</div></div><div class="ex"><span class="exk">What you can do</span><div class="exv"><ul><li>A vault this size needs <code>--max-usd 0.50</code> or more (the larger of this bill and the pessimistic estimate, rounded up to $0.50); the default ceiling is $2.00 and refuses a bill whose pessimistic end is above it.</li><li>The next scan with <code>--resume</code> sends only notes that changed, so the bill above is the ceiling, not the recurring cost, with one exception: a taxonomy, model or STATE_VERSION change re-sends everything at full price ($0.0147 at this run's rate). The first action in the checklist below is a taxonomy edit, and the 0.4.7 release already moved STATE_VERSION, so the next scan is full price either way.</li></ul></div></div></div></section><section id='graph'><h2>Graph and age</h2><div class="explain"><div class="ex"><span class="exk">What this shows</span><div class="exv">Graph facts are counts computed locally (links out and in, embeds, headings, words) plus an age in days; they are sent as numbers so Jev can tell a map of content from an orphan.</div></div><div class="ex"><span class="exk">What we found in your vault</span><div class="exv"><ul><li><strong>32% of judged notes link out at all.</strong> 150 notes have no links in and are reported as orphans.</li><li><strong>Age sources:</strong> frontmatter 208, mtime 21. 9% of notes read as 0 days old.</li></ul></div></div><div class="ex"><span class="exk">Why</span><div class="exv">A vault that references notes by path rather than by link has no graph to measure, and a subfolder scan cannot see links from the rest of the vault. Filesystem ages reset when a vault is moved, restored or re-synced, so a whole vault can read as brand new.</div></div></div></section><section id='next'><h2>Next scan</h2><p class='dek'>The concrete actions from the sections above, ordered by estimated impact: notes that would clear from the pile if Jev splits its vote the same way under the edit, or dollars saved per scan. Together they touch 23 distinct pile notes of 27; where two actions share notes, the overlap is stated. Only a rerun confirms any of it.</p><div class="tablewrap"><table><thead><tr><th>#</th><th>action</th><th>estimated effect</th><th>cost</th></tr></thead><tbody><tr><td class="num">1</td><td>Edit the taxonomy so `durable_memory` and `ephemeral` say how they differ, or merge them.</td><td class="num">17 notes that would clear if the split holds (estimate)</td><td class="why">the next scan is the whole vault at full price, $0.0147 at this run&#x27;s measured rate, because a taxonomy edit changes the fingerprint and every cache key misses</td></tr><tr><td class="num">2</td><td>Reword the `needs_review` sentence in the taxonomy so it is a last resort, not a peer of the other buckets.</td><td class="num">1 pile notes with needs_review on top or runner-up<br><span class="muted">1 of these notes are already counted by an action above; mostly the same fix seen twice</span></td><td class="why">the next scan is the whole vault at full price, $0.0147 at this run&#x27;s measured rate, because a taxonomy edit changes the fingerprint and every cache key misses</td></tr><tr><td class="num">3</td><td>If the 2 folder(s) holding 80% of `log_entry` are machine-generated, exclude them: <code>--sensitive-paths family,private,personal,secrets,inbox,Daily,Archive</code> withholds 2 of them with no other folder affected (the 5 names before it are the list this run actually used, read from this run&#x27;s sensitive list (5 names), because the flag replaces the list rather than extending it). If they are your own writing, leave them in.</td><td class="num">$0.0090 dollars per scan (measured)</td><td class="why">free; the next report is then about the notes you wrote</td></tr><tr><td class="num">4</td><td>Spot-check the 8 pile notes no rule explains: if they share a folder or a shape, that is the next rule.</td><td class="num">— <br><span class="muted">2 of these notes are already counted by an action above</span></td><td class="why">free</td></tr></tbody></table></div></section>
+
+<section>
+  <h2>Every note</h2>
+  <p class="dek">Sorted by confidence, least certain first. Persist is a weighted position on drop / park / promote, so "park–promote, leaning park" carries more than a single word would.</p>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>note</th><th>bucket</th><th>confidence</th><th>margin</th><th>persist</th><th>flags</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="path">Resources/How-to/Measure the field.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.28</span><span class="ctrack"><span class="cbar low" style="width:28.0%"></span></span></td>
+          <td class="num">0.03</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2023-12-12.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.29</span><span class="ctrack"><span class="cbar low" style="width:29.0%"></span></span></td>
+          <td class="num">0.16</td>
+          <td class="persist">drop–park, leaning drop</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/clipping 2.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.34</span><span class="ctrack"><span class="cbar low" style="width:34.0%"></span></span></td>
+          <td class="num">0.10</td>
+          <td class="persist">drop–park, leaning drop</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/Books/The Budget Book.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.35</span><span class="ctrack"><span class="cbar low" style="width:35.0%"></span></span></td>
+          <td class="num">0.03</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Novel Draft/Chapter one opening.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.37</span><span class="ctrack"><span class="cbar low" style="width:37.0%"></span></span></td>
+          <td class="num">0.14</td>
+          <td class="persist">park–promote, leaning promote</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/Articles/Postgres vacuum for the rest of us.md</td>
+          <td><span class="bucket">code_note</span></td>
+          <td class="num conf"><span class="cnum">0.40</span><span class="ctrack"><span class="cbar low" style="width:40.0%"></span></span></td>
+          <td class="num">0.10</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-01-03.md</td>
+          <td><span class="bucket">ephemeral</span></td>
+          <td class="num conf"><span class="cnum">0.42</span><span class="ctrack"><span class="cbar low" style="width:42.0%"></span></span></td>
+          <td class="num">0.03</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-12-09.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.42</span><span class="ctrack"><span class="cbar low" style="width:42.0%"></span></span></td>
+          <td class="num">0.00</td>
+          <td class="persist">drop–park, leaning drop</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Archive/Old router notes.md</td>
+          <td><span class="bucket">junk</span></td>
+          <td class="num conf"><span class="cnum">0.43</span><span class="ctrack"><span class="cbar low" style="width:43.0%"></span></span></td>
+          <td class="num">0.09</td>
+          <td class="persist">drop</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2024-04-17.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.43</span><span class="ctrack"><span class="cbar low" style="width:43.0%"></span></span></td>
+          <td class="num">0.00</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2024-11-23.md</td>
+          <td><span class="bucket">project_decision</span></td>
+          <td class="num conf"><span class="cnum">0.43</span><span class="ctrack"><span class="cbar low" style="width:43.0%"></span></span></td>
+          <td class="num">0.16</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-12-28.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.44</span><span class="ctrack"><span class="cbar low" style="width:44.0%"></span></span></td>
+          <td class="num">0.09</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Archive/old daily 2023-09-10.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.45</span><span class="ctrack"><span class="cbar low" style="width:45.0%"></span></span></td>
+          <td class="num">0.15</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Novel Draft/Novel Draft.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.45</span><span class="ctrack"><span class="cbar low" style="width:45.0%"></span></span></td>
+          <td class="num">0.23</td>
+          <td class="persist">park–promote, leaning promote</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Novel Draft/Outline.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.46</span><span class="ctrack"><span class="cbar low" style="width:46.0%"></span></span></td>
+          <td class="num">0.13</td>
+          <td class="persist">park–promote, leaning promote</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">README.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.46</span><span class="ctrack"><span class="cbar low" style="width:46.0%"></span></span></td>
+          <td class="num">0.29</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Areas/Home/Fence line agreement.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.48</span><span class="ctrack"><span class="cbar low" style="width:48.0%"></span></span></td>
+          <td class="num">0.10</td>
+          <td class="persist">promote</td>
+          <td class="flags"><span class="chip small warn">[EMAIL]</span> <span class="chip small warn">secret?</span></td>
+        </tr>
+        <tr>
+          <td class="path">MOCs/Garden MOC.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.48</span><span class="ctrack"><span class="cbar low" style="width:48.0%"></span></span></td>
+          <td class="num">0.29</td>
+          <td class="persist">park–promote, leaning promote</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Home Network/wifi password card.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.48</span><span class="ctrack"><span class="cbar low" style="width:48.0%"></span></span></td>
+          <td class="num">0.20</td>
+          <td class="persist">drop–park, leaning drop</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-12-25.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.49</span><span class="ctrack"><span class="cbar low" style="width:49.0%"></span></span></td>
+          <td class="num">0.16</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/How-to/Tune the timer for the drip line.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.49</span><span class="ctrack"><span class="cbar low" style="width:49.0%"></span></span></td>
+          <td class="num">0.38</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/Articles/VLANs for a home network.md</td>
+          <td><span class="bucket">project_decision</span></td>
+          <td class="num conf"><span class="cnum">0.50</span><span class="ctrack"><span class="cbar low" style="width:50.0%"></span></span></td>
+          <td class="num">0.16</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Meeting notes 2025-03-11.md</td>
+          <td><span class="bucket">ephemeral</span></td>
+          <td class="num conf"><span class="cnum">0.51</span><span class="ctrack"><span class="cbar low" style="width:51.0%"></span></span></td>
+          <td class="num">0.22</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/Books/Measuring Land.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.51</span><span class="ctrack"><span class="cbar low" style="width:51.0%"></span></span></td>
+          <td class="num">0.30</td>
+          <td class="persist">park–promote, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Archive/Greenhouse budget (old).md</td>
+          <td><span class="bucket">project_decision</span></td>
+          <td class="num conf"><span class="cnum">0.53</span><span class="ctrack"><span class="cbar low" style="width:53.0%"></span></span></td>
+          <td class="num">0.39</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/Books/Hedges.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.53</span><span class="ctrack"><span class="cbar low" style="width:53.0%"></span></span></td>
+          <td class="num">0.23</td>
+          <td class="persist">park–promote, leaning promote</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Archive/Recipe attempts 2023.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.54</span><span class="ctrack"><span class="cbar low" style="width:54.0%"></span></span></td>
+          <td class="num">0.24</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-11-24.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.55</span><span class="ctrack"><span class="cbar" style="width:55.0%"></span></span></td>
+          <td class="num">0.40</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Greenhouse Build/Greenhouse specification.md</td>
+          <td><span class="bucket">project_decision</span></td>
+          <td class="num conf"><span class="cnum">0.55</span><span class="ctrack"><span class="cbar" style="width:55.0%"></span></span></td>
+          <td class="num">0.22</td>
+          <td class="persist">promote</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2026-03-24.md</td>
+          <td><span class="bucket">ephemeral</span></td>
+          <td class="num conf"><span class="cnum">0.56</span><span class="ctrack"><span class="cbar" style="width:56.0%"></span></span></td>
+          <td class="num">0.27</td>
+          <td class="persist">drop–park, leaning drop</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2026-06-27.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.56</span><span class="ctrack"><span class="cbar" style="width:56.0%"></span></span></td>
+          <td class="num">0.27</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2026-08-20.md</td>
+          <td><span class="bucket">ephemeral</span></td>
+          <td class="num conf"><span class="cnum">0.56</span><span class="ctrack"><span class="cbar" style="width:56.0%"></span></span></td>
+          <td class="num">0.26</td>
+          <td class="persist">drop–park, leaning drop</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/Articles/Hedge laying, a beginner&#x27;s account.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.56</span><span class="ctrack"><span class="cbar" style="width:56.0%"></span></span></td>
+          <td class="num">0.49</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/Books/The Repair Manual.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.59</span><span class="ctrack"><span class="cbar" style="width:59.0%"></span></span></td>
+          <td class="num">0.30</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Sourdough/crumb photo note 3.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.60</span><span class="ctrack"><span class="cbar" style="width:60.0%"></span></span></td>
+          <td class="num">0.51</td>
+          <td class="persist">drop–park, leaning drop</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-01-31.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.61</span><span class="ctrack"><span class="cbar" style="width:61.0%"></span></span></td>
+          <td class="num">0.45</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2024-01-14.md</td>
+          <td><span class="bucket">ephemeral</span></td>
+          <td class="num conf"><span class="cnum">0.62</span><span class="ctrack"><span class="cbar" style="width:62.0%"></span></span></td>
+          <td class="num">0.51</td>
+          <td class="persist">drop–park, leaning drop</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Novel Draft/Scene scraps.md</td>
+          <td><span class="bucket">ephemeral</span></td>
+          <td class="num conf"><span class="cnum">0.62</span><span class="ctrack"><span class="cbar" style="width:62.0%"></span></span></td>
+          <td class="num">0.39</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Sourdough/Sourdough.md</td>
+          <td><span class="bucket">project_decision</span></td>
+          <td class="num conf"><span class="cnum">0.62</span><span class="ctrack"><span class="cbar" style="width:62.0%"></span></span></td>
+          <td class="num">0.39</td>
+          <td class="persist">park–promote, leaning promote</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Greenhouse Build/Greenhouse Build.md</td>
+          <td><span class="bucket">project_decision</span></td>
+          <td class="num conf"><span class="cnum">0.63</span><span class="ctrack"><span class="cbar" style="width:63.0%"></span></span></td>
+          <td class="num">0.40</td>
+          <td class="persist">park–promote, leaning promote</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Greenhouse Build/Watering schedule v2.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.63</span><span class="ctrack"><span class="cbar" style="width:63.0%"></span></span></td>
+          <td class="num">0.43</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/Books/Glass Houses.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.63</span><span class="ctrack"><span class="cbar" style="width:63.0%"></span></span></td>
+          <td class="num">0.43</td>
+          <td class="persist">park–promote, leaning promote</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Areas/Home/chore 1.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.64</span><span class="ctrack"><span class="cbar" style="width:64.0%"></span></span></td>
+          <td class="num">0.45</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-11-22.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.65</span><span class="ctrack"><span class="cbar" style="width:65.0%"></span></span></td>
+          <td class="num">0.44</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Greenhouse Build/Contractor meeting 1.md</td>
+          <td><span class="bucket">project_decision</span></td>
+          <td class="num conf"><span class="cnum">0.65</span><span class="ctrack"><span class="cbar" style="width:65.0%"></span></span></td>
+          <td class="num">0.41</td>
+          <td class="persist">park–promote, leaning park</td>
+          <td class="flags"><span class="chip small warn">[EMAIL], [PHONE]</span> <span class="chip small warn">secret?</span></td>
+        </tr>
+        <tr>
+          <td class="path">Archive/First novel attempt.md</td>
+          <td><span class="bucket">ephemeral</span></td>
+          <td class="num conf"><span class="cnum">0.66</span><span class="ctrack"><span class="cbar" style="width:66.0%"></span></span></td>
+          <td class="num">0.57</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-01-23.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.66</span><span class="ctrack"><span class="cbar" style="width:66.0%"></span></span></td>
+          <td class="num">0.42</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/Articles/A surveyor&#x27;s chain.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.66</span><span class="ctrack"><span class="cbar" style="width:66.0%"></span></span></td>
+          <td class="num">0.55</td>
+          <td class="persist">park–promote, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/Articles/Thermal mass in small greenhouses.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.66</span><span class="ctrack"><span class="cbar" style="width:66.0%"></span></span></td>
+          <td class="num">0.43</td>
+          <td class="persist">park–promote, leaning promote</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/Books/The Long Field.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.66</span><span class="ctrack"><span class="cbar" style="width:66.0%"></span></span></td>
+          <td class="num">0.55</td>
+          <td class="persist">park–promote, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2024-10-02.md</td>
+          <td><span class="bucket">junk</span></td>
+          <td class="num conf"><span class="cnum">0.67</span><span class="ctrack"><span class="cbar" style="width:67.0%"></span></span></td>
+          <td class="num">0.44</td>
+          <td class="persist">drop–park, leaning drop</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-01-12.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.69</span><span class="ctrack"><span class="cbar" style="width:69.0%"></span></span></td>
+          <td class="num">0.47</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/clipping 1.md</td>
+          <td><span class="bucket">junk</span></td>
+          <td class="num conf"><span class="cnum">0.69</span><span class="ctrack"><span class="cbar" style="width:69.0%"></span></span></td>
+          <td class="num">0.53</td>
+          <td class="persist">drop</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-12-06.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.70</span><span class="ctrack"><span class="cbar" style="width:70.0%"></span></span></td>
+          <td class="num">0.58</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-12-13.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.70</span><span class="ctrack"><span class="cbar" style="width:70.0%"></span></span></td>
+          <td class="num">0.49</td>
+          <td class="persist">drop–park, leaning drop</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/Articles/Covenants on land.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.70</span><span class="ctrack"><span class="cbar" style="width:70.0%"></span></span></td>
+          <td class="num">0.63</td>
+          <td class="persist">park–promote, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Home Network/Home Network.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.72</span><span class="ctrack"><span class="cbar" style="width:72.0%"></span></span></td>
+          <td class="num">0.62</td>
+          <td class="persist">park–promote, leaning promote</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Home Network/Network layout.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.72</span><span class="ctrack"><span class="cbar" style="width:72.0%"></span></span></td>
+          <td class="num">0.52</td>
+          <td class="persist">park–promote, leaning promote</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Sourdough/crumb photo note 1.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.72</span><span class="ctrack"><span class="cbar" style="width:72.0%"></span></span></td>
+          <td class="num">0.66</td>
+          <td class="persist">drop–park, leaning drop</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2024-08-13.md</td>
+          <td><span class="bucket">ephemeral</span></td>
+          <td class="num conf"><span class="cnum">0.73</span><span class="ctrack"><span class="cbar" style="width:73.0%"></span></span></td>
+          <td class="num">0.57</td>
+          <td class="persist">drop</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Novel Draft/scrap 2.md</td>
+          <td><span class="bucket">ephemeral</span></td>
+          <td class="num conf"><span class="cnum">0.73</span><span class="ctrack"><span class="cbar" style="width:73.0%"></span></span></td>
+          <td class="num">0.68</td>
+          <td class="persist">drop–park, leaning drop</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/Articles/The emergency fund debate.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.73</span><span class="ctrack"><span class="cbar" style="width:73.0%"></span></span></td>
+          <td class="num">0.56</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2024-06-03.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.74</span><span class="ctrack"><span class="cbar" style="width:74.0%"></span></span></td>
+          <td class="num">0.57</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-08-17.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.74</span><span class="ctrack"><span class="cbar" style="width:74.0%"></span></span></td>
+          <td class="num">0.56</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2026-06-13.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.74</span><span class="ctrack"><span class="cbar" style="width:74.0%"></span></span></td>
+          <td class="num">0.60</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Sourdough/crumb photo note 2.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.74</span><span class="ctrack"><span class="cbar" style="width:74.0%"></span></span></td>
+          <td class="num">0.68</td>
+          <td class="persist">drop–park, leaning drop</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-06-04.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.76</span><span class="ctrack"><span class="cbar" style="width:76.0%"></span></span></td>
+          <td class="num">0.59</td>
+          <td class="persist">drop–park, leaning drop</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-02-11.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.77</span><span class="ctrack"><span class="cbar" style="width:77.0%"></span></span></td>
+          <td class="num">0.62</td>
+          <td class="persist">drop–park, leaning drop</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2026-08-05.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.77</span><span class="ctrack"><span class="cbar" style="width:77.0%"></span></span></td>
+          <td class="num">0.63</td>
+          <td class="persist">drop–park, leaning drop</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Untitled.md</td>
+          <td><span class="bucket">ephemeral</span></td>
+          <td class="num conf"><span class="cnum">0.77</span><span class="ctrack"><span class="cbar" style="width:77.0%"></span></span></td>
+          <td class="num">0.62</td>
+          <td class="persist">park–promote, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Home Network/Network troubleshooting log.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.78</span><span class="ctrack"><span class="cbar" style="width:78.0%"></span></span></td>
+          <td class="num">0.64</td>
+          <td class="persist">promote</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2024-12-11.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.79</span><span class="ctrack"><span class="cbar" style="width:79.0%"></span></span></td>
+          <td class="num">0.64</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2026-05-31.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.79</span><span class="ctrack"><span class="cbar" style="width:79.0%"></span></span></td>
+          <td class="num">0.71</td>
+          <td class="persist">drop–park, leaning drop</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">MOCs/Kitchen MOC.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.79</span><span class="ctrack"><span class="cbar" style="width:79.0%"></span></span></td>
+          <td class="num">0.71</td>
+          <td class="persist">park–promote, leaning promote</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/Books/Flour Water Salt Time.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.79</span><span class="ctrack"><span class="cbar" style="width:79.0%"></span></span></td>
+          <td class="num">0.66</td>
+          <td class="persist">park–promote, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Archive/Greenhouse site options.md</td>
+          <td><span class="bucket">project_decision</span></td>
+          <td class="num conf"><span class="cnum">0.80</span><span class="ctrack"><span class="cbar" style="width:80.0%"></span></span></td>
+          <td class="num">0.69</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2024-02-08.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.80</span><span class="ctrack"><span class="cbar" style="width:80.0%"></span></span></td>
+          <td class="num">0.74</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2026-07-18.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.80</span><span class="ctrack"><span class="cbar" style="width:80.0%"></span></span></td>
+          <td class="num">0.68</td>
+          <td class="persist">drop–park, leaning drop</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2026-07-23.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.80</span><span class="ctrack"><span class="cbar" style="width:80.0%"></span></span></td>
+          <td class="num">0.68</td>
+          <td class="persist">drop–park, leaning drop</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">MOCs/Homelab MOC.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.80</span><span class="ctrack"><span class="cbar" style="width:80.0%"></span></span></td>
+          <td class="num">0.79</td>
+          <td class="persist">park–promote, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-03-03.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.81</span><span class="ctrack"><span class="cbar" style="width:81.0%"></span></span></td>
+          <td class="num">0.71</td>
+          <td class="persist">drop–park, leaning drop</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/Books/Writing the Middle.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.81</span><span class="ctrack"><span class="cbar" style="width:81.0%"></span></span></td>
+          <td class="num">0.71</td>
+          <td class="persist">park–promote, leaning promote</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2026-07-04.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.82</span><span class="ctrack"><span class="cbar" style="width:82.0%"></span></span></td>
+          <td class="num">0.72</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/Articles/rsync exclude patterns.md</td>
+          <td><span class="bucket">code_note</span></td>
+          <td class="num conf"><span class="cnum">0.82</span><span class="ctrack"><span class="cbar" style="width:82.0%"></span></span></td>
+          <td class="num">0.72</td>
+          <td class="persist">park–promote, leaning promote</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Shopping list.md</td>
+          <td><span class="bucket">ephemeral</span></td>
+          <td class="num conf"><span class="cnum">0.82</span><span class="ctrack"><span class="cbar" style="width:82.0%"></span></span></td>
+          <td class="num">0.72</td>
+          <td class="persist">drop–park, leaning drop</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2023-12-04.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.83</span><span class="ctrack"><span class="cbar" style="width:83.0%"></span></span></td>
+          <td class="num">0.73</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">MOCs/Home Network MOC.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.83</span><span class="ctrack"><span class="cbar" style="width:83.0%"></span></span></td>
+          <td class="num">0.78</td>
+          <td class="persist">park–promote, leaning promote</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Novel Draft/scrap 1.md</td>
+          <td><span class="bucket">ephemeral</span></td>
+          <td class="num conf"><span class="cnum">0.83</span><span class="ctrack"><span class="cbar" style="width:83.0%"></span></span></td>
+          <td class="num">0.76</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Sourdough/The recipe.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.83</span><span class="ctrack"><span class="cbar" style="width:83.0%"></span></span></td>
+          <td class="num">0.76</td>
+          <td class="persist">promote</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Areas/Health/Stretches.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.84</span><span class="ctrack"><span class="cbar" style="width:84.0%"></span></span></td>
+          <td class="num">0.80</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2023-12-22.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.84</span><span class="ctrack"><span class="cbar" style="width:84.0%"></span></span></td>
+          <td class="num">0.72</td>
+          <td class="persist">drop–park, leaning drop</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2026-01-12.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.84</span><span class="ctrack"><span class="cbar" style="width:84.0%"></span></span></td>
+          <td class="num">0.75</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/Books/Slow Running.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.84</span><span class="ctrack"><span class="cbar" style="width:84.0%"></span></span></td>
+          <td class="num">0.78</td>
+          <td class="persist">park–promote, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2024-12-15.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.85</span><span class="ctrack"><span class="cbar" style="width:85.0%"></span></span></td>
+          <td class="num">0.80</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-02-12.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.85</span><span class="ctrack"><span class="cbar" style="width:85.0%"></span></span></td>
+          <td class="num">0.78</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/Books/The Small Server.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.85</span><span class="ctrack"><span class="cbar" style="width:85.0%"></span></span></td>
+          <td class="num">0.75</td>
+          <td class="persist">park–promote, leaning promote</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/How-to/Set the vent openers.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.85</span><span class="ctrack"><span class="cbar" style="width:85.0%"></span></span></td>
+          <td class="num">0.79</td>
+          <td class="persist">park–promote, leaning promote</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Areas/Home/chore 3.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.86</span><span class="ctrack"><span class="cbar" style="width:86.0%"></span></span></td>
+          <td class="num">0.78</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2024-01-18.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.86</span><span class="ctrack"><span class="cbar" style="width:86.0%"></span></span></td>
+          <td class="num">0.81</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2024-05-18.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.87</span><span class="ctrack"><span class="cbar" style="width:87.0%"></span></span></td>
+          <td class="num">0.79</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/How-to/Compact the hardcore.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.87</span><span class="ctrack"><span class="cbar" style="width:87.0%"></span></span></td>
+          <td class="num">0.84</td>
+          <td class="persist">park–promote, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-05-07.md</td>
+          <td><span class="bucket">project_decision</span></td>
+          <td class="num conf"><span class="cnum">0.88</span><span class="ctrack"><span class="cbar" style="width:88.0%"></span></span></td>
+          <td class="num">0.79</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/Articles/Why polycarbonate yellows.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.88</span><span class="ctrack"><span class="cbar" style="width:88.0%"></span></span></td>
+          <td class="num">0.81</td>
+          <td class="persist">park–promote, leaning promote</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Areas/Health/Doctor visit summary.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.89</span><span class="ctrack"><span class="cbar" style="width:89.0%"></span></span></td>
+          <td class="num">0.82</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="chip small warn">[PHONE]</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-03-05.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.89</span><span class="ctrack"><span class="cbar" style="width:89.0%"></span></span></td>
+          <td class="num">0.83</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-05-02.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.89</span><span class="ctrack"><span class="cbar" style="width:89.0%"></span></span></td>
+          <td class="num">0.82</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-09-22.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.89</span><span class="ctrack"><span class="cbar" style="width:89.0%"></span></span></td>
+          <td class="num">0.82</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-11-20.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.89</span><span class="ctrack"><span class="cbar" style="width:89.0%"></span></span></td>
+          <td class="num">0.83</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-12-02.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.89</span><span class="ctrack"><span class="cbar" style="width:89.0%"></span></span></td>
+          <td class="num">0.81</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2026-08-29.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.89</span><span class="ctrack"><span class="cbar" style="width:89.0%"></span></span></td>
+          <td class="num">0.82</td>
+          <td class="persist">drop–park, leaning drop</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Greenhouse Build/Contractor meeting 2.md</td>
+          <td><span class="bucket">project_decision</span></td>
+          <td class="num conf"><span class="cnum">0.89</span><span class="ctrack"><span class="cbar" style="width:89.0%"></span></span></td>
+          <td class="num">0.82</td>
+          <td class="persist">park–promote, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/Articles/Wax cylinder vent openers.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.89</span><span class="ctrack"><span class="cbar" style="width:89.0%"></span></span></td>
+          <td class="num">0.86</td>
+          <td class="persist">park–promote, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2024-08-05.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.90</span><span class="ctrack"><span class="cbar" style="width:90.0%"></span></span></td>
+          <td class="num">0.88</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Greenhouse Build/Ventilation plan.md</td>
+          <td><span class="bucket">project_decision</span></td>
+          <td class="num conf"><span class="cnum">0.90</span><span class="ctrack"><span class="cbar" style="width:90.0%"></span></span></td>
+          <td class="num">0.85</td>
+          <td class="persist">park–promote, leaning promote</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Novel Draft/scrap 3.md</td>
+          <td><span class="bucket">ephemeral</span></td>
+          <td class="num conf"><span class="cnum">0.90</span><span class="ctrack"><span class="cbar" style="width:90.0%"></span></span></td>
+          <td class="num">0.87</td>
+          <td class="persist">drop–park, leaning drop</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-12-11.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.91</span><span class="ctrack"><span class="cbar" style="width:91.0%"></span></span></td>
+          <td class="num">0.86</td>
+          <td class="persist">drop–park, leaning drop</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Ideas.md</td>
+          <td><span class="bucket">ephemeral</span></td>
+          <td class="num conf"><span class="cnum">0.91</span><span class="ctrack"><span class="cbar" style="width:91.0%"></span></span></td>
+          <td class="num">0.89</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/Articles/Autolyse, explained.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.91</span><span class="ctrack"><span class="cbar" style="width:91.0%"></span></span></td>
+          <td class="num">0.86</td>
+          <td class="persist">park–promote, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2024-01-12.md</td>
+          <td><span class="bucket">junk</span></td>
+          <td class="num conf"><span class="cnum">0.92</span><span class="ctrack"><span class="cbar" style="width:92.0%"></span></span></td>
+          <td class="num">0.88</td>
+          <td class="persist">drop–park, leaning drop</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2024-05-20.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.92</span><span class="ctrack"><span class="cbar" style="width:92.0%"></span></span></td>
+          <td class="num">0.89</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2024-09-11.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.92</span><span class="ctrack"><span class="cbar" style="width:92.0%"></span></span></td>
+          <td class="num">0.86</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2024-10-20.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.92</span><span class="ctrack"><span class="cbar" style="width:92.0%"></span></span></td>
+          <td class="num">0.88</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-11-16.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.92</span><span class="ctrack"><span class="cbar" style="width:92.0%"></span></span></td>
+          <td class="num">0.86</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/Articles/Close third person, a checklist.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.92</span><span class="ctrack"><span class="cbar" style="width:92.0%"></span></span></td>
+          <td class="num">0.90</td>
+          <td class="persist">park–promote, leaning promote</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/Articles/Cold proofing.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.92</span><span class="ctrack"><span class="cbar" style="width:92.0%"></span></span></td>
+          <td class="num">0.88</td>
+          <td class="persist">park–promote, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/Articles/Zone 2 running.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.92</span><span class="ctrack"><span class="cbar" style="width:92.0%"></span></span></td>
+          <td class="num">0.91</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/How-to/Score a loaf.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.92</span><span class="ctrack"><span class="cbar" style="width:92.0%"></span></span></td>
+          <td class="num">0.91</td>
+          <td class="persist">park–promote, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-01-24.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.93</span><span class="ctrack"><span class="cbar" style="width:93.0%"></span></span></td>
+          <td class="num">0.88</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2026-05-04.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.93</span><span class="ctrack"><span class="cbar" style="width:93.0%"></span></span></td>
+          <td class="num">0.87</td>
+          <td class="persist">drop–park, leaning drop</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Greenhouse Build/Greenhouse budget (v2).md</td>
+          <td><span class="bucket">project_decision</span></td>
+          <td class="num conf"><span class="cnum">0.93</span><span class="ctrack"><span class="cbar" style="width:93.0%"></span></span></td>
+          <td class="num">0.90</td>
+          <td class="persist">park–promote, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Greenhouse Build/receipt 2024-01-02.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.93</span><span class="ctrack"><span class="cbar" style="width:93.0%"></span></span></td>
+          <td class="num">0.91</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Novel Draft/Characters.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.93</span><span class="ctrack"><span class="cbar" style="width:93.0%"></span></span></td>
+          <td class="num">0.90</td>
+          <td class="persist">park–promote, leaning promote</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Areas/Home/Paint colours.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.94</span><span class="ctrack"><span class="cbar" style="width:94.0%"></span></span></td>
+          <td class="num">0.90</td>
+          <td class="persist">park–promote, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Greenhouse Build/receipt 2024-01-22.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.94</span><span class="ctrack"><span class="cbar" style="width:94.0%"></span></span></td>
+          <td class="num">0.91</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/How-to/Feed the starter from the fridge.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.94</span><span class="ctrack"><span class="cbar" style="width:94.0%"></span></span></td>
+          <td class="num">0.93</td>
+          <td class="persist">park–promote, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/How-to/Rotate the guest wifi password.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.94</span><span class="ctrack"><span class="cbar" style="width:94.0%"></span></span></td>
+          <td class="num">0.94</td>
+          <td class="persist">park–promote, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Archive/old daily 2023-09-07.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.95</span><span class="ctrack"><span class="cbar" style="width:95.0%"></span></span></td>
+          <td class="num">0.92</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Archive/old daily 2023-09-16.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.95</span><span class="ctrack"><span class="cbar" style="width:95.0%"></span></span></td>
+          <td class="num">0.92</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Archive/old daily 2023-10-01.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.95</span><span class="ctrack"><span class="cbar" style="width:95.0%"></span></span></td>
+          <td class="num">0.92</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2024-11-03.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.95</span><span class="ctrack"><span class="cbar" style="width:95.0%"></span></span></td>
+          <td class="num">0.94</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-03-18.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.95</span><span class="ctrack"><span class="cbar" style="width:95.0%"></span></span></td>
+          <td class="num">0.93</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-11-07.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.95</span><span class="ctrack"><span class="cbar" style="width:95.0%"></span></span></td>
+          <td class="num">0.92</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2026-06-24.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.95</span><span class="ctrack"><span class="cbar" style="width:95.0%"></span></span></td>
+          <td class="num">0.94</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Greenhouse Build/receipt 2024-02-11.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.95</span><span class="ctrack"><span class="cbar" style="width:95.0%"></span></span></td>
+          <td class="num">0.93</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Novel Draft/scrap 4.md</td>
+          <td><span class="bucket">ephemeral</span></td>
+          <td class="num conf"><span class="cnum">0.95</span><span class="ctrack"><span class="cbar" style="width:95.0%"></span></span></td>
+          <td class="num">0.94</td>
+          <td class="persist">drop–park, leaning drop</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2024-02-05.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.96</span><span class="ctrack"><span class="cbar" style="width:96.0%"></span></span></td>
+          <td class="num">0.94</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-04-05.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.96</span><span class="ctrack"><span class="cbar" style="width:96.0%"></span></span></td>
+          <td class="num">0.94</td>
+          <td class="persist">drop–park, leaning drop</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-07-02.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.96</span><span class="ctrack"><span class="cbar" style="width:96.0%"></span></span></td>
+          <td class="num">0.94</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-07-24.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.96</span><span class="ctrack"><span class="cbar" style="width:96.0%"></span></span></td>
+          <td class="num">0.94</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/How-to/Check the slab for level.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.96</span><span class="ctrack"><span class="cbar" style="width:96.0%"></span></span></td>
+          <td class="num">0.94</td>
+          <td class="persist">park–promote, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/clipping 3.md</td>
+          <td><span class="bucket">junk</span></td>
+          <td class="num conf"><span class="cnum">0.96</span><span class="ctrack"><span class="cbar" style="width:96.0%"></span></span></td>
+          <td class="num">0.95</td>
+          <td class="persist">drop</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Archive/Backup job (copy).md</td>
+          <td><span class="bucket">code_note</span></td>
+          <td class="num conf"><span class="cnum">0.97</span><span class="ctrack"><span class="cbar" style="width:97.0%"></span></span></td>
+          <td class="num">0.96</td>
+          <td class="persist">park–promote, leaning promote</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Areas/Finance/Savings targets.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.97</span><span class="ctrack"><span class="cbar" style="width:97.0%"></span></span></td>
+          <td class="num">0.96</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Areas/Finance/statement note 2023-11-03.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.97</span><span class="ctrack"><span class="cbar" style="width:97.0%"></span></span></td>
+          <td class="num">0.96</td>
+          <td class="persist">drop–park, leaning drop</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2024-12-24.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.97</span><span class="ctrack"><span class="cbar" style="width:97.0%"></span></span></td>
+          <td class="num">0.94</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-01-05.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.97</span><span class="ctrack"><span class="cbar" style="width:97.0%"></span></span></td>
+          <td class="num">0.96</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-08-23.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.97</span><span class="ctrack"><span class="cbar" style="width:97.0%"></span></span></td>
+          <td class="num">0.96</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-09-15.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.97</span><span class="ctrack"><span class="cbar" style="width:97.0%"></span></span></td>
+          <td class="num">0.96</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-11-05.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.97</span><span class="ctrack"><span class="cbar" style="width:97.0%"></span></span></td>
+          <td class="num">0.96</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2026-03-26.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.97</span><span class="ctrack"><span class="cbar" style="width:97.0%"></span></span></td>
+          <td class="num">0.97</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2026-03-30.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.97</span><span class="ctrack"><span class="cbar" style="width:97.0%"></span></span></td>
+          <td class="num">0.95</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Sourdough/Flour decision.md</td>
+          <td><span class="bucket">project_decision</span></td>
+          <td class="num conf"><span class="cnum">0.97</span><span class="ctrack"><span class="cbar" style="width:97.0%"></span></span></td>
+          <td class="num">0.94</td>
+          <td class="persist">park–promote, leaning promote</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/How-to/Clear the gutters.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.97</span><span class="ctrack"><span class="cbar" style="width:97.0%"></span></span></td>
+          <td class="num">0.97</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Archive/old daily 2023-09-19.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.98</span><span class="ctrack"><span class="cbar" style="width:98.0%"></span></span></td>
+          <td class="num">0.96</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Archive/old daily 2023-09-25.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.98</span><span class="ctrack"><span class="cbar" style="width:98.0%"></span></span></td>
+          <td class="num">0.96</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Archive/old daily 2023-10-04.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.98</span><span class="ctrack"><span class="cbar" style="width:98.0%"></span></span></td>
+          <td class="num">0.98</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Areas/Finance/statement note 2024-03-12.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.98</span><span class="ctrack"><span class="cbar" style="width:98.0%"></span></span></td>
+          <td class="num">0.96</td>
+          <td class="persist">drop–park, leaning drop</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Areas/Finance/statement note 2024-07-20.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.98</span><span class="ctrack"><span class="cbar" style="width:98.0%"></span></span></td>
+          <td class="num">0.97</td>
+          <td class="persist">drop–park, leaning drop</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2024-03-07.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.98</span><span class="ctrack"><span class="cbar" style="width:98.0%"></span></span></td>
+          <td class="num">0.96</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2024-07-18.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.98</span><span class="ctrack"><span class="cbar" style="width:98.0%"></span></span></td>
+          <td class="num">0.96</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2024-12-28.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.98</span><span class="ctrack"><span class="cbar" style="width:98.0%"></span></span></td>
+          <td class="num">0.98</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2026-01-26.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.98</span><span class="ctrack"><span class="cbar" style="width:98.0%"></span></span></td>
+          <td class="num">0.96</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2026-06-16.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.98</span><span class="ctrack"><span class="cbar" style="width:98.0%"></span></span></td>
+          <td class="num">0.98</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2026-07-20.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.98</span><span class="ctrack"><span class="cbar" style="width:98.0%"></span></span></td>
+          <td class="num">0.97</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Home Network/Camera VLAN decision.md</td>
+          <td><span class="bucket">project_decision</span></td>
+          <td class="num conf"><span class="cnum">0.98</span><span class="ctrack"><span class="cbar" style="width:98.0%"></span></span></td>
+          <td class="num">0.98</td>
+          <td class="persist">park–promote, leaning promote</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/Articles/Sleep and temperature.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.98</span><span class="ctrack"><span class="cbar" style="width:98.0%"></span></span></td>
+          <td class="num">0.97</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/How-to/Restore one file from backup.md</td>
+          <td><span class="bucket">code_note</span></td>
+          <td class="num conf"><span class="cnum">0.98</span><span class="ctrack"><span class="cbar" style="width:98.0%"></span></span></td>
+          <td class="num">0.98</td>
+          <td class="persist">park–promote, leaning promote</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/How-to/Test the smoke alarms.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.98</span><span class="ctrack"><span class="cbar" style="width:98.0%"></span></span></td>
+          <td class="num">0.98</td>
+          <td class="persist">park–promote, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/How-to/Vacuum the sensor database.md</td>
+          <td><span class="bucket">code_note</span></td>
+          <td class="num conf"><span class="cnum">0.98</span><span class="ctrack"><span class="cbar" style="width:98.0%"></span></span></td>
+          <td class="num">0.96</td>
+          <td class="persist">park–promote, leaning promote</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Archive/old daily 2023-09-04.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.99</span><span class="ctrack"><span class="cbar" style="width:99.0%"></span></span></td>
+          <td class="num">0.98</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Archive/old daily 2023-09-22.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.99</span><span class="ctrack"><span class="cbar" style="width:99.0%"></span></span></td>
+          <td class="num">0.98</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Archive/old daily 2023-09-28.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.99</span><span class="ctrack"><span class="cbar" style="width:99.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Areas/Finance/Insurance renewal.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.99</span><span class="ctrack"><span class="cbar" style="width:99.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">park–promote, leaning park</td>
+          <td class="flags"><span class="chip small warn">[EMAIL]</span></td>
+        </tr>
+        <tr>
+          <td class="path">Areas/Health/Sleep notes.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.99</span><span class="ctrack"><span class="cbar" style="width:99.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">park–promote, leaning promote</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Areas/Home/Stopcock location.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.99</span><span class="ctrack"><span class="cbar" style="width:99.0%"></span></span></td>
+          <td class="num">0.98</td>
+          <td class="persist">park–promote, leaning promote</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2023-10-12.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.99</span><span class="ctrack"><span class="cbar" style="width:99.0%"></span></span></td>
+          <td class="num">0.98</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2023-10-21.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.99</span><span class="ctrack"><span class="cbar" style="width:99.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2023-10-28.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.99</span><span class="ctrack"><span class="cbar" style="width:99.0%"></span></span></td>
+          <td class="num">0.98</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2024-03-27.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.99</span><span class="ctrack"><span class="cbar" style="width:99.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2024-05-10.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.99</span><span class="ctrack"><span class="cbar" style="width:99.0%"></span></span></td>
+          <td class="num">0.98</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2024-07-19.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.99</span><span class="ctrack"><span class="cbar" style="width:99.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2024-10-04.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.99</span><span class="ctrack"><span class="cbar" style="width:99.0%"></span></span></td>
+          <td class="num">0.98</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2024-10-06.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.99</span><span class="ctrack"><span class="cbar" style="width:99.0%"></span></span></td>
+          <td class="num">0.98</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2024-11-29.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.99</span><span class="ctrack"><span class="cbar" style="width:99.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-03-24.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.99</span><span class="ctrack"><span class="cbar" style="width:99.0%"></span></span></td>
+          <td class="num">0.98</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-05-01.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.99</span><span class="ctrack"><span class="cbar" style="width:99.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">drop–park, leaning drop</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-07-19.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.99</span><span class="ctrack"><span class="cbar" style="width:99.0%"></span></span></td>
+          <td class="num">0.98</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-08-06.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">0.99</span><span class="ctrack"><span class="cbar" style="width:99.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Home Network/Router config.md</td>
+          <td><span class="bucket">code_note</span></td>
+          <td class="num conf"><span class="cnum">0.99</span><span class="ctrack"><span class="cbar" style="width:99.0%"></span></span></td>
+          <td class="num">0.98</td>
+          <td class="persist">park–promote, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Sourdough/Oven spring troubleshooting.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.99</span><span class="ctrack"><span class="cbar" style="width:99.0%"></span></span></td>
+          <td class="num">0.98</td>
+          <td class="persist">park–promote, leaning promote</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/How-to/Find the stopcock.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">0.99</span><span class="ctrack"><span class="cbar" style="width:99.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">park–promote, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/How-to/Prune the backup snapshots.md</td>
+          <td><span class="bucket">code_note</span></td>
+          <td class="num conf"><span class="cnum">0.99</span><span class="ctrack"><span class="cbar" style="width:99.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">park–promote, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/How-to/Reset the router to the saved config.md</td>
+          <td><span class="bucket">code_note</span></td>
+          <td class="num conf"><span class="cnum">0.99</span><span class="ctrack"><span class="cbar" style="width:99.0%"></span></span></td>
+          <td class="num">0.98</td>
+          <td class="persist">park–promote, leaning promote</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Archive/Starter care (copy).md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">1.00</span><span class="ctrack"><span class="cbar" style="width:100.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">park–promote, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Archive/old daily 2023-09-13.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">1.00</span><span class="ctrack"><span class="cbar" style="width:100.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Areas/Finance/Budget.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">1.00</span><span class="ctrack"><span class="cbar" style="width:100.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">park–promote, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Areas/Finance/statement note 2024-11-27.md</td>
+          <td><span class="bucket">junk</span></td>
+          <td class="num conf"><span class="cnum">1.00</span><span class="ctrack"><span class="cbar" style="width:100.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">drop</td>
+          <td class="flags"><span class="chip small">dup of Areas/Finance/statement note 2024-03-12.md</span></td>
+        </tr>
+        <tr>
+          <td class="path">Areas/Health/Running log.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">1.00</span><span class="ctrack"><span class="cbar" style="width:100.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">park–promote, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Areas/Health/Running.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">1.00</span><span class="ctrack"><span class="cbar" style="width:100.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">park–promote, leaning promote</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Areas/Home/Maintenance schedule.md</td>
+          <td><span class="bucket">durable_memory</span></td>
+          <td class="num conf"><span class="cnum">1.00</span><span class="ctrack"><span class="cbar" style="width:100.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">park–promote, leaning promote</td>
+          <td class="flags"><span class="chip small warn">[PHONE]</span> <span class="chip small warn">secret?</span></td>
+        </tr>
+        <tr>
+          <td class="path">Areas/Home/chore 2.md</td>
+          <td><span class="bucket">junk</span></td>
+          <td class="num conf"><span class="cnum">1.00</span><span class="ctrack"><span class="cbar" style="width:100.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">drop</td>
+          <td class="flags"><span class="chip small">dup of Areas/Home/chore 1.md</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2023-09-07.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">1.00</span><span class="ctrack"><span class="cbar" style="width:100.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2023-10-20.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">1.00</span><span class="ctrack"><span class="cbar" style="width:100.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2023-11-22.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">1.00</span><span class="ctrack"><span class="cbar" style="width:100.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2024-10-08.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">1.00</span><span class="ctrack"><span class="cbar" style="width:100.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-03-23.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">1.00</span><span class="ctrack"><span class="cbar" style="width:100.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Daily/2025-07-08.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">1.00</span><span class="ctrack"><span class="cbar" style="width:100.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">park–promote, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Greenhouse Build/Base slab pour.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">1.00</span><span class="ctrack"><span class="cbar" style="width:100.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">park–promote, leaning promote</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Greenhouse Build/Glazing choice.md</td>
+          <td><span class="bucket">project_decision</span></td>
+          <td class="num conf"><span class="cnum">1.00</span><span class="ctrack"><span class="cbar" style="width:100.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">park–promote, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Greenhouse Build/Greenhouse budget.md</td>
+          <td><span class="bucket">junk</span></td>
+          <td class="num conf"><span class="cnum">1.00</span><span class="ctrack"><span class="cbar" style="width:100.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">drop</td>
+          <td class="flags"><span class="chip small">dup of Archive/Greenhouse budget (old).md</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Greenhouse Build/Greenhouse build log.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">1.00</span><span class="ctrack"><span class="cbar" style="width:100.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">park–promote, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Greenhouse Build/Greenhouse site decision.md</td>
+          <td><span class="bucket">project_decision</span></td>
+          <td class="num conf"><span class="cnum">1.00</span><span class="ctrack"><span class="cbar" style="width:100.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">park–promote, leaning promote</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Home Network/Backup job.md</td>
+          <td><span class="bucket">junk</span></td>
+          <td class="num conf"><span class="cnum">1.00</span><span class="ctrack"><span class="cbar" style="width:100.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">drop</td>
+          <td class="flags"><span class="chip small">dup of Archive/Backup job (copy).md</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Home Network/Sensor database.md</td>
+          <td><span class="bucket">needs_review</span></td>
+          <td class="num conf"><span class="cnum">1.00</span><span class="ctrack"><span class="cbar" style="width:100.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">park</td>
+          <td class="flags"><span class="chip small crit">quarantine</span> <span class="chip small warn">[URL_CREDENTIAL]</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Home Network/uptime check 2023-10-24.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">1.00</span><span class="ctrack"><span class="cbar" style="width:100.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Home Network/uptime check 2024-02-21.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">1.00</span><span class="ctrack"><span class="cbar" style="width:100.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Home Network/uptime check 2024-06-20.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">1.00</span><span class="ctrack"><span class="cbar" style="width:100.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Home Network/uptime check 2024-10-18.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">1.00</span><span class="ctrack"><span class="cbar" style="width:100.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Novel Draft/Draft progress log.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">1.00</span><span class="ctrack"><span class="cbar" style="width:100.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">park–promote, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Novel Draft/Point of view decision.md</td>
+          <td><span class="bucket">project_decision</span></td>
+          <td class="num conf"><span class="cnum">1.00</span><span class="ctrack"><span class="cbar" style="width:100.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">park–promote, leaning promote</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Sourdough/Sourdough batch log.md</td>
+          <td><span class="bucket">log_entry</span></td>
+          <td class="num conf"><span class="cnum">1.00</span><span class="ctrack"><span class="cbar" style="width:100.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">park–promote, leaning promote</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Projects/Sourdough/Starter care.md</td>
+          <td><span class="bucket">junk</span></td>
+          <td class="num conf"><span class="cnum">1.00</span><span class="ctrack"><span class="cbar" style="width:100.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">drop</td>
+          <td class="flags"><span class="chip small">dup of Archive/Starter care (copy).md</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/How-to/Query last 24 hours of readings.md</td>
+          <td><span class="bucket">code_note</span></td>
+          <td class="num conf"><span class="cnum">1.00</span><span class="ctrack"><span class="cbar" style="width:100.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">park–promote, leaning promote</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/How-to/Run the dashboard script.md</td>
+          <td><span class="bucket">code_note</span></td>
+          <td class="num conf"><span class="cnum">1.00</span><span class="ctrack"><span class="cbar" style="width:100.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">park–promote, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr>
+        <tr>
+          <td class="path">Resources/How-to/Word count a chapter.md</td>
+          <td><span class="bucket">code_note</span></td>
+          <td class="num conf"><span class="cnum">1.00</span><span class="ctrack"><span class="cbar" style="width:100.0%"></span></span></td>
+          <td class="num">1.00</td>
+          <td class="persist">drop–park, leaning park</td>
+          <td class="flags"><span class="muted">—</span></td>
+        </tr></tbody>
+    </table>
+  </div>
+</section>
+
+<footer>
+  Generated by jev-the-janitor. This report is local only: it lists each note's vault-relative path as written, unredacted (the redacted form is what was sent), and never the excerpt, the frontmatter values or the aliases.<br>
+  Votes are probabilistic. The noise floor, measured on two identical live runs on a 1,974-note measured test corpus: buckets agreed on 1,974 of 1,974; bucket confidence moved by a median 0.01, p90 0.03, at most 0.10. Read the margin, not the label. Every number above was computed from the run's own rows; estimates are labelled.
+</footer>
+
+</div>
+</body>
+</html>

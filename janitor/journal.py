@@ -24,7 +24,8 @@ SCHEMA = 1
 # instruction strings in schema.py, the excerpt cap. A cached vote from another state
 # version is not the same measurement. test_journal pins the digest below so the bump is
 # a deliberate act, not something that is forgotten.
-STATE_VERSION = 13  # 13: 0.4.7: a password inside a URL is redacted; so are the path and the frontmatter key names; sibling titles are cut after redaction; ASIA ids, PGP and unterminated key blocks, keys after JSON escapes, padded AWS secrets, cards after a leading digit group, denylist entries across whitespace, and more phone shapes are caught. 0.4.6 sent every one of these.
+STATE_VERSION = 14  # 14: 0.5.0: the tool's own `janitor` key is not sent as a frontmatter key name, and a denylisted name matches across hyphens and underscores in paths and wikilinks (0.4.10 sent both)
+# 13: 0.4.7: a password inside a URL is redacted; so are the path and the frontmatter key names; sibling titles are cut after redaction; ASIA ids, PGP and unterminated key blocks, keys after JSON escapes, padded AWS secrets, cards after a leading digit group, denylist entries across whitespace, and more phone shapes are caught. 0.4.6 sent every one of these.
 # 12: Telegram tokens redacted after a bare colon and inside Bot API URLs (0.4.1 sent them)
 # 11: 16 more credential formats redacted (Telegram, Stripe, GitHub gho_/ghu_/ghs_/ghr_, GOCSPX-, Slack/Discord webhooks, xapp-, SendGrid, npm, GitLab, Hugging Face), and the key line is case-sensitive
 # 10: CARD requires a payment-network first digit (2-6)
@@ -38,7 +39,7 @@ STATE_VERSION = 13  # 13: 0.4.7: a password inside a URL is redacted; so are the
 
 def state_sources_digest() -> str:
     """Hash of the source that determines what leaves the machine."""
-    from janitor import frontmatter, index, records, redact, scan, schema
+    from janitor import frontmatter, index, plan, records, redact, scan, schema
 
     parts = [
         inspect.getsource(scan.build_state),
@@ -51,6 +52,16 @@ def state_sources_digest() -> str:
         # The graph facts are state too. The age fix in 0.3.1 changed a sent value without
         # tripping this wire, because only build_state was watched; now the facts are.
         inspect.getsource(index.VaultIndex.facts),
+        # Everything else that decides what leaves, added after a cold review found them
+        # unwatched: the title fallback, the reader, the alias keys, both sibling rankings, the plan.
+        inspect.getsource(frontmatter.note_title),
+        inspect.getsource(frontmatter.load_note),
+        inspect.getsource(frontmatter.parse_frontmatter),
+        inspect.getsource(frontmatter.rank_by_overlap),
+        inspect.getsource(frontmatter.collect_titles),
+        inspect.getsource(index._aliases),
+        inspect.getsource(index.VaultIndex.sibling_titles),
+        inspect.getsource(plan.plan_vault),
         inspect.getsource(index.note_age_days),
         inspect.getsource(index.banded_words),
         inspect.getsource(index.banded_age),

@@ -174,6 +174,11 @@ def test_no_file_in_the_tree_holds_a_credential_shaped_literal():
     for path in ROOT.rglob("*"):
         if not path.is_file() or any(part in (".git", ".venv", "__pycache__", ".pytest_cache") for part in path.parts):
             continue
+        if path.relative_to(ROOT).parts[:2] == ("examples", "demo-vault"):
+            # The demo vault deliberately holds ONE credential-shaped string, a plainly fake
+            # password in a localhost URL, so its scan has a redaction and a quarantine to show.
+            # It is fictional throughout and is swept for vendor token shapes by its own test.
+            continue
         if path.suffix in (".pyc", ".png", ".jpg"):
             continue
         try:

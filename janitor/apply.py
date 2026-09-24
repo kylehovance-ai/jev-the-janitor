@@ -28,7 +28,7 @@ from janitor.policy import Action, bucket_margin
 
 # A top-level `janitor:` key at column 0. Its block runs to the next column-0 line that is
 # not blank and not indented (a column-0 comment ends it too, and is kept).
-_JANITOR_KEY = re.compile(r"^janitor\s*:")
+_JANITOR_KEY = re.compile(r"^(?:janitor|\"janitor\"|'janitor')\s*:")
 
 
 def splice_janitor_block(header: str | None, block: str) -> str:
@@ -80,9 +80,16 @@ def stamp(note_path: Path, vote: Vote, action: Action, taxonomy: str | None = No
         body = text[m.end():]
     else:
         meta, header, body = {}, None, text
-    newline = "\r\n" if "\r\n" in text else "\n"
+    # The header's own line ending decides the ending of what we write. Through 0.4.10 one
+    # `\r\n` anywhere in the BODY rewrote an LF header as CRLF.
+    first_break = text.find("\n")
+    newline = "\r\n" if first_break > 0 and text[first_break - 1] == "\r" else "\n"
 
-    previous = dict(meta.get("janitor") or {})
+    existing = meta.get("janitor")
+    if existing is not None and not isinstance(existing, dict):
+        # `janitor: locked` or `janitor: yes`: a value we did not write and cannot merge into.
+        raise ValueError(f"the note's `janitor` key holds a {type(existing).__name__}, not a mapping; refusing to rewrite it")
+    previous = dict(existing or {})
     janitor = dict(previous)
     # A near-tie is not a decision. Stamping the model's pick as `bucket` let anything that
     # groups notes by `janitor.bucket` read a 0.36-vs-0.34 coin flip as settled.
@@ -111,9 +118,16 @@ def stamp(note_path: Path, vote: Vote, action: Action, taxonomy: str | None = No
 
     block = splice_janitor_block(header, render_janitor_block(janitor)).replace("\n", newline)
     out = (_BOM if bom else "") + f"---{newline}{block}{newline}---{newline}{body}"
-    tmp = note_path.with_name(note_path.name + ".janitor-tmp")
+    # A symlinked note is written through to its target; through 0.4.10 os.replace swapped the
+    # link itself for a regular file.
+    target = note_path.resolve()
+    tmp = target.with_name(target.name + ".janitor-tmp")
     tmp.write_bytes(out.encode("utf-8"))
-    os.replace(tmp, note_path)
+    try:
+        os.replace(tmp, target)
+    except OSError:
+        tmp.unlink(missing_ok=True)  # a file held open (a sync client, an antivirus): leave no debris
+        raise
     return True
 
 
@@ -146,7 +160,8 @@ QUARANTINE_IGNORE = (
 
 
 def quarantine(note_path: Path, vault_root: Path, *, reason: str = "", triggers: list[str] | None = None) -> Path:
-    """Move a note, unchanged, to ``_janitor/quarantine/<its vault-relative path>``.
+    """Move a note to ``_janitor/quarantine/<its vault-relative path>``. Its body is untouched; under
+    ``--apply`` its ``janitor:`` block was stamped just before the move, so the note says why it moved.
 
     The relative path is kept, so ``a/note.md`` and ``b/note.md`` stay distinct and the
     note is findable by where it came from. A destination that already exists (an earlier

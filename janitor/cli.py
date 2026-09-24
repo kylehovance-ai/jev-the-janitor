@@ -124,6 +124,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--map", type=Path, metavar="FILE",
                    help="Write the brain map's data (per-folder rollups, graph facts, duplicates, one record per note; paths and "
                         "numbers only, no titles or text) as JSON to FILE. Nothing is written unless you pass this")
+    p.add_argument("--html", type=Path, metavar="FILE",
+                   help="Write the brain-scan report (one self-contained HTML page that explains the run) to FILE. "
+                        "It lists each note's vault-relative path as written, so keep it outside the vault; it is never journaled or sent")
     p.add_argument("--review-pile", type=Path, metavar="FILE",
                    help="Write the notes routed to a human (needs_review, low confidence, quarantined) as a markdown list of wikilinks "
                         "to FILE, one place you choose; nothing is written unless you pass this. Lock a note you have decided with "
@@ -393,9 +396,11 @@ def main(argv: list[str] | None = None) -> int:
     guard_truncated = sum(1 for it in items if it.guard_truncated)
     fresh_items = [it for it in items if it.cached_row is None and it.error is None]
     retries = sum(1 for it in fresh_items if resume is not None and it.rel in resume.error_paths)
+    max_usd = DEFAULT_MAX_USD if args.max_usd is None else (args.max_usd or None)
+    bill = build_bill(plan, items, question_chars=taxonomy_chars(load_taxonomy(args.taxonomy)), max_usd=max_usd)
     summary = preflight_summary(vault, plan, sensitive_parts=sensitive_parts, live=live, cached=cached_hits,
                                 excerpt_chars=args.excerpt_chars, guard_truncated=guard_truncated,
-                                survey=len(survey.items) if survey is not None else None)
+                                survey=len(survey.items) if survey is not None else None, to_send=bill.to_send)
     if resume is not None:
         summary = resume_summary(resume, cached_hits=cached_hits, retries=retries, fresh=len(fresh_items) - retries) + "\n" + summary
     summary = "  " + profile.describe() + "\n" + summary
@@ -406,8 +411,6 @@ def main(argv: list[str] | None = None) -> int:
         summary += "\n  " + refusal
     # The bill: from the actual payloads prepare_vault built, before consent. Printed in every
     # mode (an offline run shows what a live one would cost); enforced only when live.
-    max_usd = DEFAULT_MAX_USD if args.max_usd is None else (args.max_usd or None)
-    bill = build_bill(plan, items, question_chars=taxonomy_chars(load_taxonomy(args.taxonomy)), max_usd=max_usd)
     summary += "\n" + render_bill(bill, live=live)
     if live and bill.over_budget and not args.over_budget:
         refusal = refusal or over_budget_refusal(bill)
@@ -533,6 +536,15 @@ def main(argv: list[str] | None = None) -> int:
         args.review_pile.parent.mkdir(parents=True, exist_ok=True)
         args.review_pile.write_text(review_pile(rows_out, vault), encoding="utf-8", newline="\n")
         print(f"review pile: {args.review_pile}", file=sys.stderr)
+    if args.html is not None:
+        from janitor.report import build as build_report  # local import: the report is optional output
+
+        args.html.parent.mkdir(parents=True, exist_ok=True)
+        _, diagnosis = build_report(rows_out, vault.name, args.html, sensitive_list=list(sensitive_parts),
+                                    sensitive_source=f"this run's sensitive list ({len(sensitive_parts)} names)")
+        inside = vault in args.html.resolve().parents
+        print(f"report: {args.html} ({diagnosis['n_pile']} notes need a human; local only: it lists each note's vault-relative path as written, unredacted"
+              + ("; WARNING: it is inside the vault, so the next scan will read it" if inside else "") + ")", file=sys.stderr)
     if args.json:
         print(json.dumps(rows_out, indent=2))
     else:

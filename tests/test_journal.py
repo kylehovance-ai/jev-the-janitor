@@ -95,8 +95,15 @@ FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "notes"
 # stamps or quarantines right before it records the row (workers no longer touch disk), and a
 # bracketed URL password next to a templated user or host reads as a template. Nothing sent
 # changes for any note that 0.4.7 did not already leak.
-RECORDED_STATE_SOURCES_DIGEST = "13c51f5a6c3a9b8c"
-RECORDED_STATE_VERSION = 13
+# Re-pinned 2026-09-24 WITH a bump to 14 (0.5.0): the tool's own `janitor` key is left out of the
+# sent frontmatter key names (0.4.10 sent it, so an --apply run invalidated its own cache and
+# --resume re-sent everything), and a denylisted multi-word name matches across hyphens and
+# underscores in paths and wikilinks (0.4.10 sent `jane-doe.md` and `[[jane-doe]]` as written
+# under a denylist holding `Jane Doe`). Every stamped note and every such path sends a
+# different state. The digest also grew: the title fallback, the reader, the alias keys, both
+# sibling rankings and the plan are on the wire now, after a cold review found them unwatched.
+RECORDED_STATE_SOURCES_DIGEST = "5a308d03156cb4a9"
+RECORDED_STATE_VERSION = 14
 
 
 def test_state_version_is_bumped_when_state_sources_change():
