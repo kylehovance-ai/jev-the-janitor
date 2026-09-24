@@ -499,3 +499,119 @@ def test_row_carries_title_sent_and_a_sibling_count_but_no_excerpt_without_show_
     assert "SECRET-BODY-SENTINEL" not in json.dumps(a) and "Beta" not in json.dumps(a)
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     assert "the redacted title (`title_sent`) and the number of sibling titles sent (`sibling_titles_sent`), but neither the excerpt nor the sibling titles themselves" in readme
+
+
+# --- 0.4.10: which graph facts depend on other notes, pinned per clause -----------------------
+
+def test_creating_a_links_missing_targets_changes_unresolved_links_and_the_key_but_not_is_moc(tmp_path: Path):
+    """A hub with ten links to missing notes, untouched: when the ten notes are created,
+    out_links and is_moc stay as they were (the note's own counts), unresolved_links goes
+    10 to 0, and the key changes. Through 0.4.9 the README named is_moc, not
+    unresolved_links, as the third fact that depends on other notes."""
+    (tmp_path / "hub.md").write_text("# Hub\n\n" + " ".join(f"[[t{i}]]" for i in range(10)) + "\n", encoding="utf-8")
+    before = next(r for r in scan_vault(tmp_path, client=FixtureClient(), offline=True) if r["path"] == "hub.md")
+    for i in range(10):
+        (tmp_path / f"t{i}.md").write_text(f"# T{i}\n\nbody {i}\n", encoding="utf-8")
+    after = next(r for r in scan_vault(tmp_path, client=FixtureClient(), offline=True) if r["path"] == "hub.md")
+    assert before["graph"]["out_links"] == after["graph"]["out_links"] == 10
+    assert before["graph"]["is_moc"] is True and after["graph"]["is_moc"] is True
+    assert before["graph"]["unresolved_links"] == 10 and after["graph"]["unresolved_links"] == 0
+    assert before["key"] != after["key"]
+
+
+def test_readme_names_exactly_the_facts_that_depend_on_other_notes(tmp_path: Path):
+    """The README's clause lists in_links, unresolved_links and is_orphan. Pinned against
+    behaviour: for each of the nine facts, whether editing OTHER notes (never the note
+    itself) can move it. Exactly those three move; the other six do not."""
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    clause = re.search(r"three facts depend on other notes, so a key can change without the note being edited: (.*?)\. `is_moc` does not", readme).group(1)
+    named = re.findall(r"`(\w+)`", clause)
+    assert [n for n in ["in_links", "unresolved_links", "is_orphan"] if n in named] == ["in_links", "unresolved_links", "is_orphan"]
+    assert "is_moc" not in named and "words" not in named and "headings" not in named
+    # behaviour: an aging, linked-to hub in a linking vault, before and after its neighbours change
+    hub = "# Hub\n\n" + " ".join(f"[[t{i}]]" for i in range(10)) + "\n"
+    (tmp_path / "hub.md").write_text(hub, encoding="utf-8")
+    for i in range(10):
+        (tmp_path / f"t{i}.md").write_text(f"# T{i}\n\nbody {i} links [[hub]]\n", encoding="utf-8")
+    before = next(r for r in scan_vault(tmp_path, client=FixtureClient(), offline=True) if r["path"] == "hub.md")["graph"]
+    for i in range(10):  # neighbours stop linking to the hub; one target disappears
+        (tmp_path / f"t{i}.md").write_text(f"# T{i}\n\nbody {i}\n", encoding="utf-8")
+    (tmp_path / "t9.md").unlink()
+    after = next(r for r in scan_vault(tmp_path, client=FixtureClient(), offline=True) if r["path"] == "hub.md")["graph"]
+    moved = {k for k in before if before[k] != after[k]}
+    assert moved == {"in_links", "unresolved_links"} | ({"is_orphan"} if before["is_orphan"] != after["is_orphan"] else set())
+    assert before["in_links"] == 10 and after["in_links"] == 0 and before["unresolved_links"] == 0 and after["unresolved_links"] == 1
+    for own in ("words", "headings", "age_days", "out_links", "embeds", "is_moc"):
+        assert before[own] == after[own], own
+
+
+# --- 0.4.10 self-audit, per clause: sentences that list several behaviours, each clause run ------
+
+def test_a_link_added_past_the_excerpt_cap_changes_the_key(tmp_path: Path):
+    """README:85 clause: "A heading or a link added past the excerpt cap … changes the key".
+    The heading half has its own test; this is the link half."""
+    body = "# T\n\n" + ("filler line of text.\n" * (MAX_EXCERPT // 20))
+    (tmp_path / "long.md").write_text(body, encoding="utf-8")
+    before = {r["path"]: r for r in scan_vault(tmp_path, client=FixtureClient(), offline=True)}
+    (tmp_path / "long.md").write_text(body + "see [[elsewhere]]\n", encoding="utf-8")
+    after = {r["path"]: r for r in scan_vault(tmp_path, client=FixtureClient(), offline=True)}
+    assert before["long.md"]["graph"]["out_links"] == 0 and after["long.md"]["graph"]["out_links"] == 1
+    assert before["long.md"]["key"] != after["long.md"]["key"]
+
+
+def test_a_dated_note_does_not_get_younger_when_edited_or_cloned(tmp_path: Path):
+    """README:85 clauses: "For a note that carries a parseable one, editing it does not make it
+    younger and a fresh clone does not make it new". Editing and re-writing the file (which
+    is what a clone does to mtime) leaves age_days and the key alone."""
+    from janitor.index import build_index
+
+    (tmp_path / "old.md").write_text("---\ncreated: 2020-01-15\n---\n# Old\n\nbody\n", encoding="utf-8")
+    first = build_index(tmp_path).facts("old.md")
+    (tmp_path / "old.md").write_text("---\ncreated: 2020-01-15\n---\n# Old\n\nbody\n", encoding="utf-8")  # rewritten: a fresh mtime
+    second = build_index(tmp_path).facts("old.md")
+    assert first["age_days"] == second["age_days"] == 1000  # the top band, from the frontmatter date
+    (tmp_path / "new.md").write_text("# New\n\nbody\n", encoding="utf-8")  # no date: mtime, just written
+    assert build_index(tmp_path).facts("new.md")["age_days"] == 0
+
+
+def test_age_bands_include_the_thousand_day_edge(tmp_path: Path):
+    """README:85 clause: "the day a note crosses a band edge … 1, 7, 30, 90, 365 or 1000 days old"."""
+    from datetime import date, timedelta
+
+    from janitor.index import AGE_BANDS, build_index
+
+    assert AGE_BANDS == (0, 1, 7, 30, 90, 365, 1000)
+    for days, band in ((0, 0), (1, 1), (6, 1), (7, 7), (999, 365), (1000, 1000), (5000, 1000)):
+        d = (date.today() - timedelta(days=days)).isoformat()
+        (tmp_path / f"n{days}.md").write_text(f"---\ncreated: {d}\n---\n# N\n\nbody {days}\n", encoding="utf-8")
+    index = build_index(tmp_path)
+    for days, band in ((0, 0), (1, 1), (6, 1), (7, 7), (999, 365), (1000, 1000), (5000, 1000)):
+        assert index.facts(f"n{days}.md")["age_days"] == band, days
+
+
+def test_an_undecodable_note_is_left_untouched_and_the_run_continues(tmp_path: Path):
+    """README:140 clauses beyond the row shape: "is left untouched; the run continues"."""
+    raw = b"# T\n\n\xff\xfe not utf-8\n"
+    (tmp_path / "bad.md").write_bytes(raw)
+    (tmp_path / "ok.md").write_text("# OK\n\nbody\n", encoding="utf-8")
+    rows = {r["path"]: r for r in scan_vault(tmp_path, client=FixtureClient(), offline=True, apply=True)}
+    assert rows["bad.md"]["kind"] == "skip" and rows["ok.md"]["kind"] == "vote" and rows["ok.md"].get("applied") == "frontmatter"
+    assert (tmp_path / "bad.md").read_bytes() == raw
+
+
+def test_hidden_notes_are_never_opened_and_sensitive_ones_only_under_the_flag(tmp_path: Path):
+    """README:213 clauses: "notes on hidden paths are never opened, and notes on sensitive paths
+    only under --include-sensitive". A note that is not UTF-8 produces an undecodable finding
+    only if it is opened, so it is the probe."""
+    (tmp_path / ".trash").mkdir()
+    (tmp_path / ".trash" / "h.md").write_bytes(b"# H\n\n\xff\xfe\n")
+    (tmp_path / "family").mkdir()
+    (tmp_path / "family" / "f.md").write_bytes(b"# F\n\n\xff\xfe\n")
+    (tmp_path / "ok.md").write_text("# OK\n\nbody\n", encoding="utf-8")
+    rows = {r["path"]: r for r in scan_vault(tmp_path, client=FixtureClient(), offline=True)}
+    hidden = rows.get(".trash/h.md", {})  # a hidden note gets no vote row and no finding: it was never opened
+    assert hidden.get("kind") in (None, "skip") and hidden.get("findings") is None
+    assert rows["family/f.md"]["kind"] == "skip" and rows["family/f.md"].get("findings") is None
+    rows = {r["path"]: r for r in scan_vault(tmp_path, client=FixtureClient(), offline=True, include_sensitive=True)}
+    assert rows["family/f.md"].get("findings") == ["undecodable"]  # opened now, and found unreadable
+    assert rows.get(".trash/h.md", {}).get("findings") is None  # still never opened
