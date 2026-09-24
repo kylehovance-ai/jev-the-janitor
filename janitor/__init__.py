@@ -1,3 +1,3 @@
 """Jev the Janitor: typed System One votes for markdown vault notes."""
 
-__version__ = "0.4.8"
+__version__ = "0.4.9"

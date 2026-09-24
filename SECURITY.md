@@ -10,7 +10,7 @@ in `janitor/scan.py` assembles as the note's state. Beside that state, every cal
 taxonomy's questions exactly as written (the `questions` argument of the client); nothing else is sent.
 
 - title, after local redaction
-- the frontmatter `aliases` (or the singular `alias`; both keys are read), redacted exactly like the title (the one frontmatter value sent)
+- the frontmatter `aliases`, or the singular `alias` when there is no `aliases` key (with both present only `aliases` is sent), redacted exactly like the title (the one frontmatter value sent)
 - vault-relative posix path, redacted like the title one segment at a time (never absolute,
   never the OS username; through 0.4.6 it left as written, so a denylisted name in a
   filename and a key in a folder name went out)

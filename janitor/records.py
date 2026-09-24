@@ -415,7 +415,7 @@ def run_records(items: list[PreparedRecord], *, engine: RecordClient, questions:
                 raise ScanAborted(OUT_OF_CREDITS, rows, reason="402")
             if state["sent"] >= ERROR_STOP_WINDOW and state["errors"] / state["sent"] > ERROR_STOP_RATIO:
                 state["stop"] = True
-                raise ScanAborted(f"stopping: {state['errors']} of the first {state['sent']} sent records failed; that is the run, not the records.", rows, reason="error-rate")
+                raise ScanAborted(f"stopping: {state['errors']} of the {state['sent']} records sent so far failed; that is the run, not the records.", rows, reason="error-rate")
             return
         row = _row(item, vote, fingerprint=fingerprint, review=review, started=started, payload=payload)
         judged.setdefault(item.key, row)

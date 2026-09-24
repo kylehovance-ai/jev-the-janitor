@@ -427,3 +427,75 @@ def test_a_templated_user_or_host_makes_a_bracketed_password_a_template():
         assert redact(text).hits == ["URL_CREDENTIAL"], text
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     assert "whose user or host is itself a template" in readme and "with a literal user and host, still counts" in readme
+
+
+# --- 0.4.9: the six claims an outside re-check of 0.4.8 still found untrue ----------------------
+
+def test_readme_lists_exactly_the_graph_facts_the_index_sends(tmp_path: Path):
+    """README: "any of the nine graph facts (...)". The list must equal the keys facts() returns,
+    and a heading past the excerpt cap must change the key, because `headings` counts the whole note."""
+    from janitor.index import build_index
+
+    (tmp_path / "a.md").write_text("# A\n\nbody\n", encoding="utf-8")
+    index = build_index(tmp_path)
+    keys = list(index.facts("a.md").keys())
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    m = re.search(r"any of the nine graph facts \((.*?)\)\.", readme)
+    assert m, "the README no longer lists the graph facts"
+    listed = re.findall(r"`(\w+)`", m.group(1))
+    assert listed == keys == ["words", "headings", "age_days", "out_links", "in_links", "embeds", "unresolved_links", "is_moc", "is_orphan"]
+    body = "# T\n\n" + ("filler line of text.\n" * (MAX_EXCERPT // 20))
+    (tmp_path / "long.md").write_text(body, encoding="utf-8")
+    before = {r["path"]: r["key"] for r in scan_vault(tmp_path, client=FixtureClient(), offline=True)}
+    (tmp_path / "long.md").write_text(body + "## x\n", encoding="utf-8")
+    after = {r["path"]: r["key"] for r in scan_vault(tmp_path, client=FixtureClient(), offline=True)}
+    assert before["long.md"] != after["long.md"] and before["a.md"] == after["a.md"]
+
+
+def test_a_key_can_change_without_the_note_being_edited(tmp_path: Path):
+    """in_links depends on other notes: a neighbour that starts linking to a note changes its key."""
+    (tmp_path / "a.md").write_text("# A\n\nbody a\n", encoding="utf-8")
+    (tmp_path / "b.md").write_text("# B\n\nbody b\n", encoding="utf-8")
+    before = {r["path"]: r["key"] for r in scan_vault(tmp_path, client=FixtureClient(), offline=True)}
+    (tmp_path / "b.md").write_text("# B\n\nbody b links to [[a]]\n", encoding="utf-8")
+    after = {r["path"]: r["key"] for r in scan_vault(tmp_path, client=FixtureClient(), offline=True)}
+    assert before["a.md"] != after["a.md"]  # a.md was not edited
+
+
+def test_an_unparseable_creation_key_falls_back_to_mtime(tmp_path: Path):
+    (tmp_path / "bad.md").write_text("---\ncreated: not-a-date\n---\n# A\n\nbody\n", encoding="utf-8")
+    (tmp_path / "good.md").write_text("---\ncreated: 2024-01-15\n---\n# B\n\nbody\n", encoding="utf-8")
+    rows = {r["path"]: r for r in scan_vault(tmp_path, client=FixtureClient(), offline=True)}
+    assert rows["bad.md"]["age_source"] == "mtime" and rows["good.md"]["age_source"] == "frontmatter"
+    assert "whose value does not parse (`created: not-a-date` counts as none)" in (ROOT / "README.md").read_text(encoding="utf-8")
+
+
+def test_alias_is_read_only_when_aliases_is_absent(tmp_path: Path):
+    (tmp_path / "both.md").write_text("---\naliases: [Plural One]\nalias: Singular\n---\n# A\n\nbody a\n", encoding="utf-8")
+    (tmp_path / "single.md").write_text("---\nalias: Singular\n---\n# B\n\nbody b\n", encoding="utf-8")
+    rec = Recording()
+    scan_vault(tmp_path, client=rec, offline=True)
+    sent = {s["path"]: s["aliases"] for s in rec.states}
+    assert sent["both.md"] == ["Plural One"] and sent["single.md"] == ["Singular"]
+    for doc in ("README.md", "SECURITY.md"):
+        assert "when there is no `aliases` key (with both present only `aliases` is sent)" in (ROOT / doc).read_text(encoding="utf-8"), doc
+
+
+def test_vault_and_records_error_rate_stop_messages_agree():
+    """Standing rule: one quantity, one wording. Both paths stop on a running total once the window is full."""
+    scan_src = (ROOT / "janitor" / "scan.py").read_text(encoding="utf-8")
+    records_src = (ROOT / "janitor" / "records.py").read_text(encoding="utf-8")
+    assert "notes sent so far failed; that is the run, not the notes." in scan_src
+    assert "records sent so far failed; that is the run, not the records." in records_src
+    assert "of the first" not in scan_src and "of the first" not in records_src
+
+
+def test_row_carries_title_sent_and_a_sibling_count_but_no_excerpt_without_show_payload(tmp_path: Path):
+    (tmp_path / "a.md").write_text("# Alpha ops@example.com\n\nSECRET-BODY-SENTINEL\n", encoding="utf-8")
+    (tmp_path / "b.md").write_text("# Beta\n\nbody b\n", encoding="utf-8")
+    rows = {r["path"]: r for r in scan_vault(tmp_path, client=FixtureClient(), offline=True)}
+    a = rows["a.md"]
+    assert a["title_sent"] == "Alpha [EMAIL]" and a["sibling_titles_sent"] == 1 and "sent" not in a
+    assert "SECRET-BODY-SENTINEL" not in json.dumps(a) and "Beta" not in json.dumps(a)
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "the redacted title (`title_sent`) and the number of sibling titles sent (`sibling_titles_sent`), but neither the excerpt nor the sibling titles themselves" in readme
