@@ -80,9 +80,12 @@ def build_state(
     siblings = [redact(t, denylist=denylist) for t in titles]
     titles = [s.text[:MAX_TITLE_CHARS] for s in siblings]
     segments = [redact(seg, denylist=denylist) for seg in rel_path.split("/")]
-    # The tool's own `janitor` key says nothing about the note and would make every stamped
-    # note a cache miss on the next run (through 0.4.10 an --apply run invalidated its own
-    # cache: `--resume` after it re-sent every note). Every other key name is sent, redacted.
+    # The tool's own `janitor` key says nothing about the note. Through 0.4.10 its name was
+    # sent, so a note's FIRST stamp added a key name and changed its cache key: `--resume`
+    # after an --apply run re-sent every note stamped for the first time (a note already
+    # carrying the block kept its key). Every other key name is sent, redacted. The other
+    # half of that bug, an undated note's age moving with the stamp's write, is closed in
+    # apply.stamp (STAMP_DATE_KEY) since 0.5.2.
     keys = [redact(k, denylist=denylist) for k in note.keys if k != "janitor"]
     global _LAST_REDACTED_LENGTH
     _LAST_REDACTED_LENGTH = len(redacted_full)
@@ -209,7 +212,7 @@ class Prepared:
     local: LocalDecision | None = None  # decided by code (triage.py); never sent
     undecodable: str | None = None  # finding: not valid UTF-8; a skip row, never sent, never retried
     frontmatter_error: str | None = None  # finding: header not readable YAML; judged on its body, never restamped
-    age_source: str | None = None  # "frontmatter" or "mtime"; an mtime age resets when the vault is cloned, restored or synced
+    age_source: str | None = None  # "frontmatter", "stamp" (the date the janitor block recorded) or "mtime"; an mtime age resets when the vault is cloned, restored or synced
 
 
 def prepare_vault(
@@ -506,7 +509,11 @@ def run_prepared(
                 # vote in flight lost its row.
                 applied = f"error: {type(exc).__name__}"
                 state["apply_errors"] = state.get("apply_errors", 0) + 1
-        emit(_vote_row(item, vote, action, applied, fingerprint, started, payload=payload))
+        row = _vote_row(item, vote, action, applied, fingerprint, started, payload=payload)
+        # The question characters this call carried, so the report's measured chars-per-token is
+        # computed on this run's taxonomy, not on a constant that only fits the default file.
+        row["question_chars"] = question_chars
+        emit(row)
         if item.local is None and vote.input_tokens:
             state["tokens"] += vote.input_tokens
             state["chars"] += len(canonical(item.state)) + question_chars  # the basis the range is defined on
@@ -522,9 +529,13 @@ def run_prepared(
                     "title_sent": (item.state or {}).get("title", ""),
                     "sibling_titles_sent": len((item.state or {}).get("other_note_titles", [])),
                     "redacted": list(item.hits), "redacted_own": list(item.own_hits),
-                    "truncated": item.truncated, "frontmatter_error": item.frontmatter_error, "age_source": item.age_source})
-        if apply and row.get("applied") is None:
-            # The cached run was a dry run; this one applies. Rebuild the vote from the row.
+                    "truncated": item.truncated, "frontmatter_error": item.frontmatter_error, "age_source": item.age_source,
+                    "question_chars": question_chars})
+        if apply and (row.get("applied") is None or str(row.get("applied")).startswith("error:")):
+            # The cached run was a dry run, or its write failed (a header whose `janitor:` value
+            # was not a mapping, a file held open): this one applies. Rebuild the vote from the
+            # row. Through 0.5.1 only the dry-run case re-applied, so a note whose write had
+            # failed was served with its old error on every `--resume --apply` and never stamped.
             vote = _vote_from_row(row)
             try:
                 row["applied"] = apply_item(item, vote, call_decide(item, vote))

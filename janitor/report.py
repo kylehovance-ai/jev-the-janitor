@@ -28,10 +28,11 @@ from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
-from janitor.bill import CHARS_PER_TOKEN_HIGH, CHARS_PER_TOKEN_LOW, PRICE_PER_MILLION_USD, usd
+from janitor.bill import CHARS_PER_TOKEN_HIGH, CHARS_PER_TOKEN_LOW, PRICE_PER_MILLION_USD, taxonomy_chars, usd
+from janitor.journal import STATE_VERSION
 from janitor.redact import DEFAULT_SENSITIVE_PATH_PARTS as DEFAULT_SENSITIVE
 from janitor.redact import segment_matches
-from janitor.schema import DEFAULT_TAXONOMY, taxonomy_fingerprint
+from janitor.schema import DEFAULT_TAXONOMY, load_taxonomy, taxonomy_fingerprint
 
 # ---- thresholds and constants: every rule in the report names one of these ----------------
 REVIEW_FLOOR = 0.55            # policy.decide: a bucket vote under this is routed to a human
@@ -49,7 +50,12 @@ SPOT_CHECK_N = 20              # confident notes to spot-check instead of trusti
 CLONED_SHARE = 0.95            # at or above this share of 0-day mtime ages, the copy was just cloned or copied
 OVERLAP_SHARE = 0.5            # two next-scan actions sharing this share of their notes are said to overlap
 NOISE_FLOOR = "two identical live runs on a 1,974-note measured test corpus: buckets agreed on 1,974 of 1,974; bucket confidence moved by a median 0.01, p90 0.03, at most 0.10"
-QUESTION_CHARS = 2086          # the default taxonomy's serialized questions, sent with every call
+DEFAULT_FINGERPRINT = taxonomy_fingerprint(DEFAULT_TAXONOMY)
+DEFAULT_QUESTION_CHARS = taxonomy_chars(load_taxonomy(None))  # the default taxonomy's serialized questions, sent with every call ON THAT FILE
+# The question characters of a run come from its rows (`question_chars`, recorded since 0.5.2); a
+# saved run without the field gets the default file's size only when its fingerprint is the
+# default's, and otherwise the measured ratio is reported as unavailable, not computed on the
+# wrong taxonomy (through 0.5.1 a constant 2,086 was used for every run, --taxonomy runs included).
 MAX_USD_STEP = 0.50            # the --max-usd suggestion is rounded up to this
 EXCERPT_DOUBLE = 2             # the truncation what-if doubles the cap
 TAXONOMY_FILE = DEFAULT_TAXONOMY  # sentences are quoted only when the run's fingerprint is this file's
@@ -411,8 +417,30 @@ def diagnose(rows, *, floor=REVIEW_FLOOR, journal_header=None, sensitive_list=No
     D["causes"] = causes
     D["pile_no_cause"] = sum(1 for r in pile if causes[id(r)] == ["unexplained"])
 
+    # -- the question characters each call carried (see DEFAULT_QUESTION_CHARS)
+    def question_size(r):
+        q = r.get("question_chars")
+        if isinstance(q, int) and q > 0:
+            return q
+        return DEFAULT_QUESTION_CHARS if r.get("taxonomy") == DEFAULT_FINGERPRINT else None
+    sent_rows = [r for r in judged if not r.get("cached")]
+    sizes = [question_size(r) for r in sent_rows]
+    D["question_chars_known"] = bool(sent_rows) and all(s is not None for s in sizes)
+    D["question_chars_total"] = sum(s for s in sizes if s) if D["question_chars_known"] else None
+    D["question_chars_per_call"] = round(D["question_chars_total"] / len(sent_rows)) if D["question_chars_known"] else None
+    if not sent_rows:
+        D["question_chars_source"] = None
+    elif all(isinstance(r.get("question_chars"), int) and r["question_chars"] > 0 for r in sent_rows):
+        D["question_chars_source"] = "recorded on each row"
+    elif D["question_chars_known"]:
+        D["question_chars_source"] = "the default taxonomy's size, matched by this run's fingerprint"
+    else:
+        D["question_chars_source"] = None
+    qc = D["question_chars_per_call"] or 0
+    D["state_version"] = (journal_header or {}).get("state_version")
+
     # -- the cost of a confirming rerun of the pile alone
-    pile_chars = sum(r.get("payload_chars") or 0 for r in pile) + QUESTION_CHARS * len(pile)
+    pile_chars = sum(r.get("payload_chars") or 0 for r in pile) + qc * len(pile)
     D["pile_rerun_usd"] = cost_for_chars(pile_chars)
     pile_tokens = sum(r.get("input_tokens") or 0 for r in pile)
     D["pile_rerun_measured_usd"] = pile_tokens / 1e6 * PRICE_PER_MILLION_USD if pile_tokens else None
@@ -472,8 +500,9 @@ def diagnose(rows, *, floor=REVIEW_FLOOR, journal_header=None, sensitive_list=No
     payload = sum(r.get("payload_chars") or 0 for r in judged if not r.get("cached"))
     D["input_tokens"], D["n_sent"], D["payload_chars"] = tokens, sent_n, payload
     D["cost_usd"] = tokens / 1e6 * PRICE_PER_MILLION_USD
-    D["measured_ratio"] = ((payload + QUESTION_CHARS * sent_n) / tokens) if tokens else None
-    D["estimate_usd"] = cost_for_chars(payload + QUESTION_CHARS * sent_n) if sent_n else (0.0, 0.0)
+    known = D["question_chars_known"]
+    D["measured_ratio"] = ((payload + D["question_chars_total"]) / tokens) if tokens and known else None
+    D["estimate_usd"] = cost_for_chars(payload + D["question_chars_total"]) if sent_n and known else (0.0, 0.0)
     D["ratio_verdict"] = None
     if D["measured_ratio"] is not None:
         if D["measured_ratio"] < CHARS_PER_TOKEN_LOW:
@@ -552,7 +581,8 @@ def diagnose(rows, *, floor=REVIEW_FLOOR, journal_header=None, sensitive_list=No
     if D["errors_by_class"]:
         actions.append({"impact": len(errors), "unit": "errored notes", "why": f"{len(errors)} notes errored",
                         "what": "Run again with --resume: errored notes are retried; persistent ones stay held.",
-                        "cost": f"about {usd(cost_for_chars(QUESTION_CHARS * len(errors))[0])} for the questions alone, plus their payload (estimate)"})
+                        "cost": (f"about {usd(cost_for_chars(qc * len(errors))[0])} for the questions alone, plus their payload (estimate)" if qc
+                                 else "their payload plus the questions (this run's question size is not recorded, so no figure)")})
     if D["orphan_unknown"]:
         actions.append({"impact": 0, "unit": "", "what": "Orphan status is unknown on a vault that barely links; nothing to do unless you add links.", "cost": "free"})
     if D["age_mtime_share"] > 0.5:
@@ -659,7 +689,7 @@ def section_a(D):
             f", at {D['measured_ratio']:.2f} characters per token ({D['ratio_verdict']} the {CHARS_PER_TOKEN_LOW}–{CHARS_PER_TOKEN_HIGH} range the estimate assumes)." if D["measured_ratio"] else "."),
     ]
     if dom:
-        sentences.append(f"<strong>`{dom['bucket']}` holds {dom['share']:.0%}</strong> of judged notes, and {len(dom['folders'])} folder(s) hold {DOMINANT_COVER:.0%} of it: this vault is mostly {esc(BUCKET_BLURB.get(dom['bucket'], dom['bucket']))}.")
+        sentences.append(f"<strong>`{dom['bucket']}` holds {dom['share']:.0%}</strong> of judged notes, and {len(dom['folders'])} folder(s) hold {DOMINANT_COVER:.0%} of it: most of this vault reads to Jev as `{dom['bucket']}` ({esc(BUCKET_BLURB.get(dom['bucket'], dom['bucket']))}).")
     elif D["bucket_counts"]:
         b, n = D["bucket_counts"].most_common(1)[0]
         sentences.append(f"The largest bucket is `{b}` at {pct(n, D['n_judged']):.0f}%; no bucket holds more than {DOMINANT_SHARE:.0%}.")
@@ -859,21 +889,45 @@ def section_e(D):
     return "<section id='errors'><h2>Errors</h2>" + explain(shows, li(found), why, li(can), "") + table + "</section>"
 
 
+def next_scan_price(D):
+    """Whether the scan after the checklist's first action is full price, computed from the run.
+
+    Through 0.5.1 this sentence was hard-coded ("the first action is a taxonomy edit, and the
+    0.4.7 release already moved STATE_VERSION"), true for one demo run and not in general.
+    """
+    first = D["next_scan"][0] if D["next_scan"] else None
+    if first is None:
+        out = "The checklist below is empty, so the next scan costs only the notes that changed."
+    elif "taxonomy" in first["what"].lower():
+        out = "The first action in the checklist below is a taxonomy edit, so the scan after it is full price."
+    else:
+        out = "The first action in the checklist below is not a taxonomy edit, so the scan after it costs only the notes that changed."
+    if D.get("state_version") is not None and D["state_version"] != STATE_VERSION:
+        out += f" This run's keys were made under STATE_VERSION {D['state_version']} and this build uses {STATE_VERSION}, so the next scan is full price regardless."
+    return out
+
+
 def section_f(D):
     shows = f"What this run cost, and how the API's own token count compares with the {CHARS_PER_TOKEN_HIGH} down to {CHARS_PER_TOKEN_LOW} characters-per-token range the pre-flight estimate assumes."
     if not D["n_sent"] or D["measured_ratio"] is None:
-        found = ("Nothing was sent in this run, so there is no measured ratio." if not D["n_sent"]
-                 else f"{D['n_sent']:,} notes were judged but no input tokens were counted (an offline run: the keyword fixture bills nothing), so there is no measured ratio and the cost is $0.")
+        if not D["n_sent"]:
+            found = "Nothing was sent in this run, so there is no measured ratio."
+        elif not D["input_tokens"]:
+            found = f"{D['n_sent']:,} notes were judged but no input tokens were counted (an offline run: the keyword fixture bills nothing), so there is no measured ratio and the cost is $0."
+        else:
+            found = (f"<strong>{usd(D['cost_usd'])}</strong> for {D['input_tokens']:,} input tokens over {D['n_sent']:,} calls. The measured characters-per-token figure is <strong>unavailable</strong>: "
+                     f"the ratio needs the question characters each call carried, this run's rows do not record them (runs before 0.5.2), and its taxonomy fingerprint "
+                     f"<code>{esc(D['taxonomy'])}</code> is not the default file's, so the default's size would be the wrong number.")
         return "<section id='cost'><h2>Cost and measurement</h2>" + explain(shows, found, "", "", "") + "</section>"
     lo, hi = D["estimate_usd"]
     found = [f"<strong>{usd(D['cost_usd'])}</strong> for {D['input_tokens']:,} input tokens over {D['n_sent']:,} calls at ${PRICE_PER_MILLION_USD} per million (input only: one invoice check put any output-token charge under about $0.005 per million).",
-             f"<strong>Measured: {D['measured_ratio']:.2f} characters per token</strong> ({D['payload_chars']:,} payload characters plus {QUESTION_CHARS:,} question characters per call, over the tokens the API counted), "
+             f"<strong>Measured: {D['measured_ratio']:.2f} characters per token</strong> ({D['payload_chars']:,} payload characters plus {D['question_chars_per_call']:,} question characters per call, {D['question_chars_source']}, over the tokens the API counted), "
              f"<strong>{D['ratio_verdict']}</strong> the assumed range. The pre-flight would have estimated {usd(hi)} to {usd(lo)} for this payload."]
     verdict = {"below": f"This vault tokenizes more densely than prose (logs, ids, code), so the pessimistic end of the estimate was light by {pct(D['cost_usd'] - lo, lo):.0f}%; the spend meter is what protects the bill on a vault like this.",
                "above": "This vault is prose-heavy and tokenizes lighter than the anchors; the estimate is conservative here.",
                "inside": "The estimate's range bracketed the real bill; nothing to adjust."}[D["ratio_verdict"]]
     can = [f"A vault this size needs <code>--max-usd {flag_amount(D['suggested_max_usd'])}</code> or more (the larger of this bill and the pessimistic estimate, rounded up to {usd(MAX_USD_STEP)}); the default ceiling is $2.00 and refuses a bill whose pessimistic end is above it.",
-           f"The next scan with <code>--resume</code> sends only notes that changed, so the bill above is the ceiling, not the recurring cost, with one exception: a taxonomy, model or STATE_VERSION change re-sends everything at full price ({usd(D['full_rescan_usd'])} at this run's rate). The first action in the checklist below is a taxonomy edit, and the 0.4.7 release already moved STATE_VERSION, so the next scan is full price either way."]
+           f"The next scan with <code>--resume</code> sends only notes that changed, so the bill above is the ceiling, not the recurring cost, with one exception: a taxonomy, model or STATE_VERSION change re-sends everything at full price ({usd(D['full_rescan_usd'])} at this run's rate). {next_scan_price(D)}"]
     return "<section id='cost'><h2>Cost and measurement</h2>" + explain(shows, li(found), verdict, li(can), "") + "</section>"
 
 
@@ -982,10 +1036,9 @@ TEMPLATE = r"""<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Janitor Run Report</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
 <style>
+/* Native font stacks only: this page lists unredacted vault paths, so opening it must make no
+   network request (through 0.5.1 it fetched three families from Google Fonts). */
 :root{{
   --ground:#F2F5F6; --surface:#FFFFFF; --sunk:#E7ECEE;
   --ink:#13191C; --ink-soft:#4F5C63; --ink-faint:#7C8990; --rule:#D5DDE0;
@@ -1018,77 +1071,77 @@ TEMPLATE = r"""<!doctype html>
 *{{box-sizing:border-box}}
 body{{
   margin:0;background:var(--ground);color:var(--ink);
-  font-family:"Source Serif 4",Georgia,serif;font-size:16px;line-height:1.6;
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-size:16px;line-height:1.6;
 }}
 .wrap{{max-width:1060px;margin:0 auto;padding:0 16px 90px}}
 header.top{{padding:46px 0 22px;border-bottom:1px solid var(--rule);margin-bottom:30px}}
-.eyebrow{{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.14em;
+.eyebrow{{font-family:ui-monospace,"Cascadia Mono","SF Mono",Menlo,Consolas,monospace;font-size:11px;letter-spacing:.14em;
   text-transform:uppercase;color:var(--ink-faint);margin:0 0 12px}}
-h1{{font-family:Archivo,sans-serif;font-weight:700;font-size:clamp(28px,4.4vw,38px);
+h1{{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-weight:700;font-size:clamp(28px,4.4vw,38px);
   line-height:1.06;letter-spacing:-.02em;margin:0 0 14px;text-wrap:balance}}
 .chips{{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}}
-.chip{{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.04em;
+.chip{{font-family:ui-monospace,"Cascadia Mono","SF Mono",Menlo,Consolas,monospace;font-size:11px;letter-spacing:.04em;
   padding:4px 9px;border-radius:3px;background:var(--sunk);color:var(--ink-soft);white-space:nowrap}}
 .chip.small{{font-size:10px;padding:2px 6px}}
 .chip.ok{{background:var(--ok-soft);color:var(--ok)}}
 .chip.warn{{background:var(--warn-soft);color:var(--warn)}}
 .chip.crit{{background:var(--crit-soft);color:var(--crit)}}
 .chip.live{{background:var(--crit-soft);color:var(--crit)}}
-.meta{{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--ink-faint);
+.meta{{font-family:ui-monospace,"Cascadia Mono","SF Mono",Menlo,Consolas,monospace;font-size:11.5px;color:var(--ink-faint);
   margin-top:14px;line-height:1.9}}
 .tiles{{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin:0 0 34px}}
 .tile{{background:var(--surface);border-radius:5px;padding:16px 18px;box-shadow:var(--shadow)}}
-.tile .n{{font-family:Archivo,sans-serif;font-weight:700;font-size:30px;line-height:1;
+.tile .n{{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-weight:700;font-size:30px;line-height:1;
   letter-spacing:-.02em;font-variant-numeric:tabular-nums;display:block}}
-.tile .k{{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.09em;
+.tile .k{{font-family:ui-monospace,"Cascadia Mono","SF Mono",Menlo,Consolas,monospace;font-size:10.5px;letter-spacing:.09em;
   text-transform:uppercase;color:var(--ink-faint);display:block;margin-top:8px}}
 .tile.flag .n{{color:var(--warn)}}
 .tile.stop .n{{color:var(--crit)}}
 section{{margin:0 0 40px}}
-h2{{font-family:Archivo,sans-serif;font-weight:600;font-size:20px;letter-spacing:-.01em;margin:0 0 10px}}
-h3{{font-family:Archivo,sans-serif;font-weight:600;font-size:15px;margin:22px 0 8px}}
+h2{{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-weight:600;font-size:20px;letter-spacing:-.01em;margin:0 0 10px}}
+h3{{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-weight:600;font-size:15px;margin:22px 0 8px}}
 .dek{{color:var(--ink-faint);font-size:14.5px;margin:0 0 18px;max-width:70ch}}
 .lede{{font-size:17px;line-height:1.65;max-width:78ch;background:var(--surface);border-radius:5px;padding:18px 20px;box-shadow:var(--shadow)}}
 .explain{{background:var(--surface);border-radius:5px;box-shadow:var(--shadow);margin:0 0 18px;padding:6px 20px}}
 .ex{{display:grid;grid-template-columns:190px 1fr;gap:14px;padding:12px 0;border-bottom:1px solid var(--rule);font-size:14.5px;line-height:1.55}}
 .ex:last-child{{border-bottom:none}}
 @media (max-width:680px){{.ex{{grid-template-columns:1fr}}}}
-.exk{{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-faint);padding-top:3px}}
+.exk{{font-family:ui-monospace,"Cascadia Mono","SF Mono",Menlo,Consolas,monospace;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-faint);padding-top:3px}}
 .exv ul{{margin:0;padding-left:18px}}
 .exv li{{margin:0 0 6px}}
 .exv q{{font-style:italic;color:var(--ink-soft)}}
-.exv code{{font-family:"IBM Plex Mono",monospace;font-size:12.5px;background:var(--sunk);padding:1px 5px;border-radius:3px}}
+.exv code{{font-family:ui-monospace,"Cascadia Mono","SF Mono",Menlo,Consolas,monospace;font-size:12.5px;background:var(--sunk);padding:1px 5px;border-radius:3px}}
 .bars{{background:var(--surface);border-radius:5px;padding:18px 20px;box-shadow:var(--shadow);display:grid;gap:11px}}
 .barrow{{display:grid;grid-template-columns:230px 1fr 40px;gap:14px;align-items:center}}
 @media (max-width:680px){{.barrow{{grid-template-columns:1fr 1fr 34px}}}}
 .barlabel{{display:flex;flex-direction:column;line-height:1.3}}
-.bname{{font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink)}}
+.bname{{font-family:ui-monospace,"Cascadia Mono","SF Mono",Menlo,Consolas,monospace;font-size:12.5px;color:var(--ink)}}
 .bnote{{font-size:11.5px;color:var(--ink-faint)}}
 .bartrack{{background:var(--sunk);border-radius:3px;height:14px;overflow:hidden}}
 .barfill{{background:var(--accent);height:100%;border-radius:0 3px 3px 0;min-width:2px}}
-.barval{{font-family:"IBM Plex Mono",monospace;font-size:13px;text-align:right;font-variant-numeric:tabular-nums;color:var(--ink-soft)}}
+.barval{{font-family:ui-monospace,"Cascadia Mono","SF Mono",Menlo,Consolas,monospace;font-size:13px;text-align:right;font-variant-numeric:tabular-nums;color:var(--ink-soft)}}
 .tablewrap{{overflow-x:auto;background:var(--surface);border-radius:5px;box-shadow:var(--shadow)}}
 table{{width:100%;border-collapse:collapse;font-size:14px}}
-th{{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.08em;
+th{{font-family:ui-monospace,"Cascadia Mono","SF Mono",Menlo,Consolas,monospace;font-size:10.5px;letter-spacing:.08em;
   text-transform:uppercase;color:var(--ink-faint);text-align:left;font-weight:400;
   padding:11px 14px;border-bottom:1px solid var(--rule);white-space:nowrap}}
 td{{padding:10px 14px;border-bottom:1px solid var(--rule);vertical-align:middle}}
 tr:last-child td{{border-bottom:none}}
 tr:hover td{{background:var(--sunk)}}
-.path{{font-family:"IBM Plex Mono",monospace;font-size:12.5px;max-width:330px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
-.bucket{{font-family:"IBM Plex Mono",monospace;font-size:11.5px;background:var(--accent-soft);color:var(--accent);padding:3px 7px;border-radius:3px;white-space:nowrap}}
-.num{{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;font-size:12.5px;color:var(--ink-soft);white-space:nowrap}}
+.path{{font-family:ui-monospace,"Cascadia Mono","SF Mono",Menlo,Consolas,monospace;font-size:12.5px;max-width:330px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
+.bucket{{font-family:ui-monospace,"Cascadia Mono","SF Mono",Menlo,Consolas,monospace;font-size:11.5px;background:var(--accent-soft);color:var(--accent);padding:3px 7px;border-radius:3px;white-space:nowrap}}
+.num{{font-family:ui-monospace,"Cascadia Mono","SF Mono",Menlo,Consolas,monospace;font-variant-numeric:tabular-nums;font-size:12.5px;color:var(--ink-soft);white-space:nowrap}}
 .conf{{min-width:118px}}
 .cnum{{display:inline-block;width:34px}}
 .ctrack{{display:inline-block;width:56px;height:6px;background:var(--sunk);border-radius:3px;overflow:hidden;vertical-align:middle;margin-left:6px}}
 .cbar{{display:block;height:100%;background:var(--accent);border-radius:0 3px 3px 0}}
 .cbar.low{{background:var(--warn)}}
 .persist{{font-size:12.5px;color:var(--ink-soft);white-space:nowrap}}
-.why{{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--ink-faint)}}
+.why{{font-family:ui-monospace,"Cascadia Mono","SF Mono",Menlo,Consolas,monospace;font-size:11.5px;color:var(--ink-faint)}}
 .flags{{white-space:nowrap}}
 .empty{{color:var(--ink-faint);font-style:italic;padding:18px 14px}}
 .muted{{color:var(--ink-faint)}}
-footer{{margin-top:50px;padding-top:20px;border-top:1px solid var(--rule);font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-faint);line-height:1.85}}
+footer{{margin-top:50px;padding-top:20px;border-top:1px solid var(--rule);font-family:ui-monospace,"Cascadia Mono","SF Mono",Menlo,Consolas,monospace;font-size:11px;color:var(--ink-faint);line-height:1.85}}
 </style>
 </head>
 <body>
@@ -1130,7 +1183,7 @@ footer{{margin-top:50px;padding-top:20px;border-top:1px solid var(--rule);font-f
 
 <footer>
   Generated by jev-the-janitor. This report is local only: it lists each note's vault-relative path as written, unredacted (the redacted form is what was sent), and never the excerpt, the frontmatter values or the aliases.<br>
-  Votes are probabilistic. The noise floor, measured on {noise}. Read the margin, not the label. Every number above was computed from the run's own rows; estimates are labelled.
+  Votes are probabilistic. Read the margin, not the label. Every number above was computed from this run's own rows, and estimates are labelled; the one quoted figure is the noise floor, a measurement from the calibration corpus, not from these rows: {noise}.
 </footer>
 
 </div>

@@ -63,6 +63,9 @@ def state_sources_digest() -> str:
         inspect.getsource(index.VaultIndex.sibling_titles),
         inspect.getsource(plan.plan_vault),
         inspect.getsource(index.note_age_days),
+        inspect.getsource(index.creation_date),  # the age's sources, since 0.5.2: the frontmatter's own keys, then the stamp's recorded date
+        inspect.getsource(index.stamp_date),
+        str(index.STAMP_DATE_KEY),
         inspect.getsource(index.banded_words),
         inspect.getsource(index.banded_age),
         str(index.AGE_BANDS),

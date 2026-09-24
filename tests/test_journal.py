@@ -102,7 +102,13 @@ FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "notes"
 # under a denylist holding `Jane Doe`). Every stamped note and every such path sends a
 # different state. The digest also grew: the title fallback, the reader, the alias keys, both
 # sibling rankings and the plan are on the wire now, after a cold review found them unwatched.
-RECORDED_STATE_SOURCES_DIGEST = "5a308d03156cb4a9"
+# Re-pinned 2026-09-24 WITHOUT a bump (still 14), 0.5.2: an undated note's age is read from the date its
+# stamp recorded (`janitor.created_from_mtime`, the mtime before the janitor's first write) before falling
+# back to the mtime, and the two readers joined the digest. For every note on disk, 0.5.1 and 0.5.2 send the
+# same state: a 0.5.1 stamp has no recorded date, so the mtime path is used as 0.5.1 used it; a note stamped
+# by 0.5.2 keeps sending the band 0.5.1 sent before the stamp, which is the point. No key that 0.5.1 would
+# serve changes, so a bump would only re-bill every vault for nothing.
+RECORDED_STATE_SOURCES_DIGEST = "5c4bf2bfd545f992"
 RECORDED_STATE_VERSION = 14
 
 

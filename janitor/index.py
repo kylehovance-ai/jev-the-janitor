@@ -214,11 +214,31 @@ def parse_links(body: str) -> tuple[list[str], int]:
 
 
 CREATION_KEYS = ("created", "date", "created_at", "creation_date")
+# The date the janitor's own stamp records for a note whose frontmatter has no creation date:
+# the file's mtime as it was before the first stamp. A stamp is a write, so it moves the mtime
+# to now; without this record an undated note's sent age fell from its real band to 0 on the
+# scan after an --apply, its cache key changed, and --resume re-sent it (through 0.5.1).
+STAMP_DATE_KEY = "created_from_mtime"
+
+
+def creation_date(meta: dict) -> date | None:
+    """The earliest parseable creation date in the frontmatter's own keys, or None."""
+    stamps = [d for d in (_as_date(meta.get(key)) for key in CREATION_KEYS) if d is not None]
+    return min(stamps) if stamps else None
+
+
+def stamp_date(meta: dict) -> date | None:
+    """The date the janitor block recorded from the file's mtime at its first stamp, or None."""
+    janitor = meta.get("janitor")
+    return _as_date(janitor.get(STAMP_DATE_KEY)) if isinstance(janitor, dict) else None
 
 
 def age_source(meta: dict) -> str:
-    """Where the age would come from: "frontmatter" when a creation stamp parses, else "mtime"."""
-    return "frontmatter" if any(_as_date(meta.get(k)) is not None for k in CREATION_KEYS) else "mtime"
+    """Where the age comes from: "frontmatter" when a creation key parses, "stamp" when only the
+    janitor block's recorded mtime date does, else "mtime" (which resets when the vault is copied)."""
+    if creation_date(meta) is not None:
+        return "frontmatter"
+    return "stamp" if stamp_date(meta) is not None else "mtime"
 
 
 def note_age_days(meta: dict, mtime: float, today: date | None = None) -> int | None:
@@ -234,13 +254,15 @@ def note_age_days(meta: dict, mtime: float, today: date | None = None) -> int | 
     ``updated`` no longer feed it.
     """
     today = today or datetime.now(timezone.utc).date()
-    stamps = [d for d in (_as_date(meta.get(key)) for key in CREATION_KEYS) if d is not None]
-    if not stamps:
+    start = creation_date(meta)
+    if start is None:
+        start = stamp_date(meta)  # the mtime the janitor recorded before its own write moved it
+    if start is None:
         try:
-            stamps.append(datetime.fromtimestamp(mtime, tz=timezone.utc).date())
+            start = datetime.fromtimestamp(mtime, tz=timezone.utc).date()
         except (OverflowError, OSError, ValueError):
             return None
-    return max(0, (today - min(stamps)).days)
+    return max(0, (today - start).days)
 
 
 def _as_date(val: Any) -> date | None:

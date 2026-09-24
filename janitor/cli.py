@@ -459,11 +459,18 @@ def main(argv: list[str] | None = None) -> int:
         else sum(1 for e in plan if e.status in ("scan", "skip_sensitive"))
     progress = Progress(total, quiet=args.quiet)
 
-    counts = {"errors": 0}
+    counts = {"errors": 0, "apply_errors": 0}
 
     def on_row(row: dict) -> None:
         if row.get("kind") == "error":
             counts["errors"] += 1
+        # A vote whose file could not be written: the row is kept, the run went on, and the
+        # exit code must still say "finished with failures". Through 0.5.1 only error rows
+        # counted, so a failed stamp exited 0 while the docs promised 2. Only a write THIS run
+        # attempted counts: under --apply every row with an error was attempted now (a served
+        # row with an old error is re-applied), and a dry --resume attempts none, so it exits 0.
+        if args.apply and row.get("kind") == "vote" and str(row.get("applied") or "").startswith("error:"):
+            counts["apply_errors"] += 1
         if journal is not None:
             # --show-payload is for the operator reading one run, not for the journal. The
             # journal lives outside the vault and outlives the run; redacted vault text put
@@ -587,6 +594,10 @@ def main(argv: list[str] | None = None) -> int:
         return EXIT_ERRORS
     if errors:
         print(f"{errors} note(s) failed; rows marked action=error. Re-run with --resume to retry only those. Exit {EXIT_ERRORS}.", file=sys.stderr)
+        return EXIT_ERRORS
+    if counts["apply_errors"]:
+        print(f"{counts['apply_errors']} note(s) were judged but could not be written; their rows carry `applied: \"error: <Type>\"` and the vote stands. "
+              f"Fix the file (a header whose `janitor:` value is not a mapping, a file held open) and run --apply again. Exit {EXIT_ERRORS}.", file=sys.stderr)
         return EXIT_ERRORS
     return 0
 

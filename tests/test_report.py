@@ -263,7 +263,7 @@ def test_every_pile_row_gets_its_causes(D):
 
 
 def test_pile_rerun_cost_is_the_bills_range(D):
-    chars = N_PILE * 3000 + R.QUESTION_CHARS * N_PILE
+    chars = N_PILE * 3000 + R.DEFAULT_QUESTION_CHARS * N_PILE
     assert D["pile_rerun_usd"] == R.cost_for_chars(chars)
     assert D["pile_rerun_measured_usd"] == pytest.approx(N_PILE * 1000 / 1e6 * R.PRICE_PER_MILLION_USD)
 
@@ -296,7 +296,7 @@ def test_cost_and_measured_ratio(D):
     assert D["input_tokens"] == tokens and D["n_sent"] == N_JUDGED
     assert D["cost_usd"] == pytest.approx(tokens / 1e6 * R.PRICE_PER_MILLION_USD)
     payload = 62 * 6000 + (N_JUDGED - 62) * 3000
-    assert D["measured_ratio"] == pytest.approx((payload + R.QUESTION_CHARS * N_JUDGED) / tokens)
+    assert D["measured_ratio"] == pytest.approx((payload + R.DEFAULT_QUESTION_CHARS * N_JUDGED) / tokens)
     assert D["suggested_max_usd"] == R.MAX_USD_STEP
 
 
@@ -785,3 +785,75 @@ def test_header_time_is_the_runs_latest_stamp_or_says_it_is_the_render_time():
     assert R.when_label(rows) == "run 2026-01-02 03:59 UTC"
     rows[1]["at"] = "not a time"
     assert R.when_label(rows).startswith("rendered ")
+
+
+# --- 0.5.2: the 0.5.1 audit's findings on the page ------------------------------------------------
+
+def test_measured_ratio_uses_the_runs_recorded_question_size_not_a_constant():
+    """A3. Through 0.5.1 a constant 2,086 (the default taxonomy's questions) fed the measured ratio of
+    every run, --taxonomy runs included. The rows now record the size; an old run on another
+    taxonomy gets "unavailable", not a wrong number; an old run on the default gets the default's."""
+    rows = [vote(f"n{i}.md", "durable_memory", {"durable_memory": 0.9}, tokens=1000, chars=3000) for i in range(10)]
+    for r in rows:
+        r["taxonomy"] = "0000deadbeef"
+        r["question_chars"] = 500
+    D = R.diagnose(rows)
+    assert D["question_chars_per_call"] == 500 and D["question_chars_source"] == "recorded on each row"
+    assert D["measured_ratio"] == pytest.approx((10 * 3000 + 10 * 500) / 10_000)
+    assert "500 question characters per call, recorded on each row" in R.section_f(D)
+    for r in rows:
+        del r["question_chars"]
+    D = R.diagnose(rows)
+    assert D["question_chars_known"] is False and D["measured_ratio"] is None and D["estimate_usd"] == (0.0, 0.0)
+    page = R.section_f(D)
+    assert "unavailable" in page and "0000deadbeef" in page and "characters per token</strong>" not in page
+    for r in rows:
+        r["taxonomy"] = R.DEFAULT_FINGERPRINT
+    D = R.diagnose(rows)
+    assert D["question_chars_per_call"] == R.DEFAULT_QUESTION_CHARS == 2086
+    assert "matched by this run's fingerprint" in R.section_f(D)
+    assert D["measured_ratio"] == pytest.approx((10 * 3000 + 10 * 2086) / 10_000)
+
+
+def test_the_page_makes_no_network_request(page):
+    """B1. The page lists unredacted vault paths; opening it must fetch nothing. Through 0.5.1 it
+    loaded three font families from Google Fonts."""
+    head = page.split("</head>")[0]
+    assert "<link" not in head and "<script" not in page and "@import" not in page
+    assert not re.search(r"""(src|href)=["']https?://""", page) and not re.search(r"""url\(\s*["']?https?://""", page)
+    assert "fonts.googleapis" not in page and "fonts.gstatic" not in page
+    assert "system-ui" in page and "ui-monospace" in page
+
+
+def test_the_next_scan_price_sentence_is_computed_from_the_run(D, page):
+    """B2. Through 0.5.1 the cost section hard-coded "the first action is a taxonomy edit, and the
+    0.4.7 release already moved STATE_VERSION"."""
+    first = D["next_scan"][0]
+    sentence = R.next_scan_price(D)
+    assert ("is a taxonomy edit" in sentence) == ("taxonomy" in first["what"].lower())
+    assert "0.4.7 release already moved" not in page and "STATE_VERSION" not in sentence  # same version: no warning
+    older = dict(D, state_version=R.STATE_VERSION - 1)
+    assert f"made under STATE_VERSION {R.STATE_VERSION - 1} and this build uses {R.STATE_VERSION}" in R.next_scan_price(older)
+    assert "regardless" not in R.next_scan_price(dict(D, state_version=R.STATE_VERSION))
+    assert "checklist below is empty" in R.next_scan_price(dict(D, next_scan=[]))
+    not_taxonomy = dict(D, next_scan=[{"what": "Run again with --resume", "impact": 1}])
+    assert "is not a taxonomy edit" in R.next_scan_price(not_taxonomy)
+
+
+def test_the_dominant_bucket_sentence_attributes_the_reading_to_jev(D, page):
+    """The summary said "this vault is mostly <the bucket's definition>", stating the taxonomy's
+    sentence as a fact about the vault. It is Jev's reading, and the summary says so."""
+    assert D["dominant"]["bucket"] == "log_entry"
+    summary = re.search(r"<section id='summary'>(.*?)</section>", page, re.S).group(1)
+    assert "most of this vault reads to Jev as `log_entry` (a dated run report or snapshot)" in summary
+    assert "this vault is mostly" not in summary
+
+
+def test_the_committed_demo_page_carries_the_052_fixes():
+    page = (RUN_DIR / "report.html").read_text(encoding="utf-8")
+    assert "most of this vault reads to Jev as `log_entry`" in page and "this vault is mostly" not in page
+    assert "fonts.googleapis" not in page and "<link" not in page.split("</head>")[0]
+    assert "0.4.7 release" not in page
+    assert "question characters per call, the default taxonomy's size, matched by this run's fingerprint" in page  # run.json predates the field
+    assert "The first action in the checklist below is a taxonomy edit, so the scan after it is full price." in page
+    assert "noise floor, a measurement from the calibration corpus" in page

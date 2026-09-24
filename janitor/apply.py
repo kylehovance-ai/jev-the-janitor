@@ -24,6 +24,7 @@ from janitor.client import Vote
 from janitor.frontmatter import BOM as _BOM
 from janitor.frontmatter import FRONTMATTER_RE
 from janitor.frontmatter import split_frontmatter  # noqa: F401  re-exported: the reader and the writer share one parser
+from janitor.index import STAMP_DATE_KEY, creation_date
 from janitor.policy import Action, bucket_margin
 
 # A top-level `janitor:` key at column 0. Its block runs to the next column-0 line that is
@@ -115,6 +116,15 @@ def stamp(note_path: Path, vote: Vote, action: Action, taxonomy: str | None = No
     if not _changed(previous, janitor):
         return False
     janitor["at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    # An undated note's age is read from its mtime, and this write moves the mtime to now.
+    # Record the pre-write mtime's date once, so the age (and the cache key) survives the
+    # stamp; a note with a creation key never needs it, and the mtime is left alone
+    # (touching it back would hide the write from sync clients that watch mtimes).
+    if creation_date(meta) is None and STAMP_DATE_KEY not in janitor:
+        try:
+            janitor[STAMP_DATE_KEY] = datetime.fromtimestamp(note_path.stat().st_mtime, tz=timezone.utc).date().isoformat()
+        except (OverflowError, OSError, ValueError):
+            pass
 
     block = splice_janitor_block(header, render_janitor_block(janitor)).replace("\n", newline)
     out = (_BOM if bom else "") + f"---{newline}{block}{newline}---{newline}{body}"

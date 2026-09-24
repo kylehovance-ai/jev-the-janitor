@@ -153,7 +153,11 @@ def test_stamp_has_the_documented_keys(tmp_path: Path):
     scan_vault(tmp_path, offline=True, apply=True)
     post = frontmatter.load(tmp_path / "n.md", encoding="utf-8")
     assert list(post.metadata["janitor"]) == ["bucket", "persist", "confidence", "bucket_margin", "contains_secret",
-                                              "safe_to_leave_in_git", "action", "reason", "model", "taxonomy", "at"]
+                                              "safe_to_leave_in_git", "action", "reason", "model", "taxonomy", "at",
+                                              "created_from_mtime"]  # the last only on a note with no creation date (0.5.2)
+    (tmp_path / "d.md").write_text("---\ncreated: 2024-02-02\n---\n# D\n\nbody d\n", encoding="utf-8")
+    scan_vault(tmp_path, offline=True, apply=True)
+    assert "created_from_mtime" not in frontmatter.load(tmp_path / "d.md", encoding="utf-8").metadata["janitor"]
 
 
 # --- "the --json report additionally carries bucket_probabilities, bucket_margin, exact_duplicate_of"
@@ -840,3 +844,136 @@ def test_a_symlinked_note_is_written_through_not_replaced(tmp_path: Path):
     scan_vault(vault, client=FixtureClient(), offline=True, apply=True)
     assert link.is_symlink()
     assert "janitor:" in target.read_text(encoding="utf-8")
+
+
+# --- 0.5.2: the 0.5.1 audit's findings, each reproduced on the public 0.5.1 before it was fixed ----
+
+def _run_json(capsys, vault: Path, *extra):
+    from janitor import cli
+    rc = cli.main([str(vault), "--offline", "--yes", "--journal", "vault", "--json", *extra])
+    out = capsys.readouterr().out
+    return rc, {r["path"]: r for r in json.loads(out)}
+
+
+def test_a_stamp_keeps_an_undated_notes_cache_key(tmp_path: Path, capsys):
+    """A1. Through 0.5.1 an undated note's sent age came from its mtime, which the stamp's own
+    write moved to now: after --apply, --resume served the dated note and re-sent the undated one.
+    The stamp now records the pre-write mtime's date; the age (and the key) is read from it."""
+    import os as _os
+    import time as _time
+    NL = chr(10)
+    body = NL + NL + "a paragraph about the greenhouse vents and the barrel. " * 20 + NL
+    (tmp_path / "dated.md").write_text("---" + NL + "created: 2020-01-01" + NL + "---" + NL + "# Dated note" + body, encoding="utf-8")
+    (tmp_path / "undated.md").write_text("# Undated note" + body + "a different closing line" + NL, encoding="utf-8")
+    old = _time.time() - 100 * 86400
+    for name in ("dated.md", "undated.md"):
+        _os.utime(tmp_path / name, (old, old))
+    rc, rows = _run_json(capsys, tmp_path, "--apply")
+    assert rc == 0 and rows["undated.md"]["applied"] == "frontmatter" and rows["dated.md"]["applied"] == "frontmatter"
+    assert rows["undated.md"]["graph"]["age_days"] == 90 and rows["undated.md"]["age_source"] == "mtime"
+    stamped = (tmp_path / "undated.md").read_text(encoding="utf-8")
+    assert "created_from_mtime: " in stamped  # the pre-write mtime's date, recorded once
+    assert "created_from_mtime" not in (tmp_path / "dated.md").read_text(encoding="utf-8")  # a dated note needs none
+    assert (tmp_path / "undated.md").stat().st_mtime > old + 86400  # the mtime itself is left at the write: sync clients see it
+    rc, rows = _run_json(capsys, tmp_path, "--resume")
+    assert rc == 0 and rows["dated.md"]["cached"] is True
+    assert rows["undated.md"]["cached"] is True  # 0.5.1: False, its band had fallen from 90 to 0
+    assert rows["undated.md"]["graph"]["age_days"] == 90 and rows["undated.md"]["age_source"] == "stamp"
+    # a second --apply reaches the same conclusion and does not touch the note
+    before = (tmp_path / "undated.md").read_bytes()
+    rc, rows = _run_json(capsys, tmp_path, "--resume", "--apply")
+    assert rows["undated.md"]["cached"] is True and (tmp_path / "undated.md").read_bytes() == before
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "an undated note's age is read from the date the stamp recorded (`janitor.created_from_mtime`" in readme
+
+
+def test_a_note_stamped_before_the_recorded_date_keeps_its_key_and_gets_the_date_on_its_next_restamp(tmp_path: Path):
+    """A1, the upgrade path: a 0.5.1 stamp has no recorded date. Its age is read from the file's
+    mtime, as 0.5.1 sent it, so its key holds; the next re-stamp records the date."""
+    from janitor.index import age_source, note_age_days
+    from datetime import date
+    meta_old = {"janitor": {"bucket": "junk", "at": "2026-09-01T00:00:00Z"}}
+    day = date(2026, 9, 24)
+    mtime = 1_758_000_000.0  # 2025-09-16
+    assert age_source(meta_old) == "mtime" and note_age_days(meta_old, mtime, day) == (day - date(2025, 9, 16)).days
+    meta_new = {"janitor": {"bucket": "junk", "created_from_mtime": "2024-01-01"}}
+    assert age_source(meta_new) == "stamp" and note_age_days(meta_new, mtime, day) == (day - date(2024, 1, 1)).days
+    meta_dated = {"created": "2023-05-05", "janitor": {"created_from_mtime": "2024-01-01"}}
+    assert age_source(meta_dated) == "frontmatter" and note_age_days(meta_dated, mtime, day) == (day - date(2023, 5, 5)).days
+
+
+def test_a_failed_stamp_exits_2_with_its_own_line(tmp_path: Path, capsys):
+    """A2. README: the exit code is 2 so scripts can tell "finished with failures". Through 0.5.1
+    only error rows counted, so a vote whose file could not be written exited 0."""
+    from janitor import cli
+    NL = chr(10)
+    (tmp_path / "ok.md").write_text("# ok" + NL + NL + "body ok" + NL, encoding="utf-8")
+    (tmp_path / "yes.md").write_text("---" + NL + "janitor: yes" + NL + "---" + NL + "# yes" + NL + NL + "body yes" + NL, encoding="utf-8")
+    rc = cli.main([str(tmp_path), "--offline", "--yes", "--journal", "vault", "--apply", "--json"])
+    out, err = capsys.readouterr()
+    rows = {r["path"]: r for r in json.loads(out)}
+    assert rows["yes.md"]["applied"] == "error: ValueError" and rows["ok.md"]["applied"] == "frontmatter"
+    assert rc == cli.EXIT_ERRORS == 2  # 0.5.1: 0
+    assert "1 note(s) were judged but could not be written" in err and "Exit 2" in err
+    assert not list(tmp_path.glob("*.janitor-tmp"))
+    # and a run with no failed write still exits 0
+    (tmp_path / "yes.md").write_text("# yes" + NL + NL + "body yes" + NL, encoding="utf-8")
+    assert cli.main([str(tmp_path), "--offline", "--yes", "--journal", "vault", "--apply", "--json"]) == 0
+    capsys.readouterr()
+
+
+def test_a_failed_write_is_retried_under_resume_apply_and_a_dry_resume_does_not_count_it(tmp_path: Path, capsys):
+    """Review of 0.5.2's first cut. A note whose write failed was served with its old error on
+    every `--resume --apply` and never stamped (the served path re-applied only dry-run rows), so
+    the advice "fix the file and run --apply again" only worked without --resume, which re-bills.
+    And a dry `--resume` after the failure exited 2 for a write it never attempted."""
+    from janitor import cli
+    NL = chr(10)
+    (tmp_path / "a.md").write_text("---" + NL + "janitor: yes" + NL + "tags: [fence]" + NL + "---" + NL + "# A" + NL + NL + "body a about the fence" + NL, encoding="utf-8")
+    (tmp_path / "b.md").write_text("# B" + NL + NL + "body b about the gate" + NL, encoding="utf-8")
+    rc, rows = _run_json(capsys, tmp_path, "--apply")
+    assert rc == 2 and rows["a.md"]["applied"] == "error: ValueError" and rows["b.md"]["applied"] == "frontmatter"
+    # a dry --resume attempts no write: the served row still carries the old error, the exit is 0
+    rc, rows = _run_json(capsys, tmp_path, "--resume")
+    assert rc == 0 and rows["a.md"]["cached"] is True and rows["a.md"]["applied"] == "error: ValueError"
+    # the owner deletes the offending line; the key-name set is unchanged (`janitor` is not sent)
+    (tmp_path / "a.md").write_text("---" + NL + "tags: [fence]" + NL + "---" + NL + "# A" + NL + NL + "body a about the fence" + NL, encoding="utf-8")
+    rc, rows = _run_json(capsys, tmp_path, "--resume", "--apply")
+    assert rows["a.md"]["cached"] is True, "the fix must not re-bill the note"
+    assert rows["a.md"]["applied"] == "frontmatter" and rc == 0  # 0.5.2 first cut: served with the old error, rc 2, forever
+    assert "janitor:" in (tmp_path / "a.md").read_text(encoding="utf-8") and "tags: [fence]" in (tmp_path / "a.md").read_text(encoding="utf-8")
+
+
+def test_a_quarantined_note_with_an_unreadable_header_is_moved_unstamped_and_the_manifest_says_why(tmp_path: Path):
+    """C5. README and SECURITY said the moved note is always stamped first; a header the janitor
+    cannot read is moved exactly as it is, and the reason lives in the manifest either way."""
+    NL = chr(10)
+    broken = "---" + NL + "status: blocked: waiting on review" + NL + "---" + NL + "# Leak" + NL + NL + "token sk-" + "a" * 40 + NL
+    (tmp_path / "leak.md").write_text(broken, encoding="utf-8")
+    (tmp_path / "ok.md").write_text("---" + NL + "title: fine" + NL + "---" + NL + "# Leak two" + NL + NL + "token sk-" + "b" * 40 + NL, encoding="utf-8")
+    rows = {r["path"]: r for r in scan_vault(tmp_path, client=FixtureClient(), offline=True, apply=True)}
+    assert rows["leak.md"]["applied"].startswith("quarantine:") and rows["ok.md"]["applied"].startswith("quarantine:")
+    moved = (tmp_path / "_janitor" / "quarantine" / "leak.md").read_text(encoding="utf-8")
+    assert moved == broken  # unstamped, byte-for-byte
+    assert "janitor:" in (tmp_path / "_janitor" / "quarantine" / "ok.md").read_text(encoding="utf-8")  # stamped, then moved
+    manifest = [json.loads(line) for line in (tmp_path / "_janitor" / "quarantine" / "manifest.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert {m["reason"] for m in manifest} and all("KEY" in m["reason"] for m in manifest)
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    security = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
+    assert "a note whose header does not parse is moved exactly as it is, unstamped" in readme
+    assert "a note whose header" in security and "does not parse is moved as it is, unstamped" in security
+
+
+def test_the_docs_say_what_holds_after_the_051_audit():
+    """C1, C2, C3, C4, C6: each overclaim the audit found, replaced by the measured statement."""
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    security = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
+    assert "second brain of 250 notes, 251 files with the vault's own README" in readme  # C1: 250 notes, 251 scanned
+    assert "every one of them a split between two buckets, led by `ephemeral` against `log_entry` (7 notes)" in readme  # C2
+    assert "the name in each of `jane-doe.md`, `Jane_Doe.md` and a `[[jane-doe]]` link becomes `[NAME]` (`[NAME].md`, `[NAME].md` and `[[[NAME]]]`" in readme  # C3
+    assert "a note's first stamp added a key name and changed its cache key" in readme  # C4
+    assert "every `--apply` run changed the cache key of every note it stamped" not in readme
+    assert "except the tool's own `janitor` key, which is not sent" in security  # C6
+    assert "the manifest either way" in security  # C5
+    # the "unrelated folder" examples are fictional ones, in both files
+    assert "`Recipes/` or `garden/beds/` get no warning" in readme and "(`Recipes/`, `garden/beds/`)" in security

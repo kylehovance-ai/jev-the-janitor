@@ -14,7 +14,7 @@ taxonomy's questions exactly as written (the `questions` argument of the client)
 - vault-relative posix path, redacted like the title one segment at a time (never absolute,
   never the OS username; through 0.4.6 it left as written, so a denylisted name in a
   filename and a key in a folder name went out)
-- frontmatter key names only, redacted like the title (through 0.4.6 as written)
+- frontmatter key names only, redacted like the title (through 0.4.6 as written), except the tool's own `janitor` key, which is not sent
 - the first 16,000 characters of the body by default, after local redaction; `--excerpt-chars N`
   sends the first N and `--excerpt-chars full` sends whole notes up to a 60,000-character
   guard. The body is redacted first, then cut. (Through 0.2.0 the default was 1,200; this
@@ -66,7 +66,7 @@ match was exact and all four were scanned); `private-equity` is skipped too, and
 skipped folder is named in the pre-flight so an over-match is visible. `inboxes` or `myinbox`
 is a different word, is scanned, and is listed as a near-miss warning. The warnings cover
 only folders that hold a sensitive name inside a longer word. A sensitive folder with an
-unrelated name (`Governance/`, `core/identity/`) produces no warning; the included-folders
+unrelated name (`Recipes/`, `garden/beds/`) produces no warning; the included-folders
 list is the only control for it, and reading it is the operator's job. A sensitive name
 above the folder you name refuses the run with exit code 1 rather than skipping everything.
 Folders and files beginning with `.` are skipped by a separate rule that `--include-sensitive`
@@ -146,7 +146,8 @@ must never leave.
 
 `--apply` generates the `janitor:` frontmatter block only; every other header line and
 the whole body are spliced back byte-for-byte via a temp file and atomic replace. It never deletes. Quarantine moves a
-note, its body byte-for-byte unchanged and its `janitor:` block stamped with the reason, to `_janitor/quarantine/<its vault-relative path>`, writes a `.gitignore`
+note, its body byte-for-byte unchanged and, when its header parses, its `janitor:` block stamped with the reason (a note whose header
+does not parse is moved as it is, unstamped; the reason is in the manifest either way), to `_janitor/quarantine/<its vault-relative path>`, writes a `.gitignore`
 containing `*` into that folder on the first move, and appends a line per move to
 `_janitor/quarantine/manifest.jsonl` (original path, destination, reason, time). The
 ignore rule keeps the moved note out of a future commit; it does not remove the note's
