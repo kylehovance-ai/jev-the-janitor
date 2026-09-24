@@ -47,17 +47,18 @@ from janitor.schema import build_questions, load_question_set, question_payloads
 FIELD_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")  # a field name is caller text and is sent; only identifiers pass
 
 
-def field_name_problem(name: Any) -> str | None:
+def field_name_problem(name: Any, denylist: list[str] | None = None) -> str | None:
     """Why a field name is refused, as a fixed phrase, or None. Never quotes the name: it is sent text.
 
     The identifier shape alone let a token through on the first outside run: `ghp_` plus 36
     alphanumerics IS an identifier, and so are the Stripe, npm, Hugging Face and fine-grained
     GitHub shapes, whose bodies use underscores. So every name also goes through the redactor,
-    and any hit at all refuses the file.
+    with the denylist (through 0.4.6 without it, so `john_smith` was accepted and sent under a
+    denylist holding `john`), and any hit at all refuses the file.
     """
     if not isinstance(name, str) or not FIELD_NAME.match(name):
         return "has a name that is not an identifier (letters, digits, underscore, 64 max); field names are sent"
-    if redact(name).hits:
+    if redact(name, denylist=denylist).hits:
         return "has a name the redactor would redact; field names are sent"
     return None
 
@@ -85,7 +86,7 @@ class Record:
     line: int
 
 
-def load_records(path: Path) -> list[Record]:
+def load_records(path: Path, denylist: list[str] | None = None) -> list[Record]:
     """Read a JSONL file of records. Refuses the whole file on the first malformed line.
 
     Every refusal names the line number and a fixed phrase, never the caller's text: a bad
@@ -113,7 +114,7 @@ def load_records(path: Path) -> list[Record]:
             if not isinstance(sent, dict) or not sent:
                 raise ValueError(f"line {n}: 'sent' must be a non-empty object; it is the only thing that leaves")
             for i, (name, value) in enumerate(sent.items(), start=1):
-                problem = field_name_problem(name)
+                problem = field_name_problem(name, denylist)
                 if problem:
                     raise ValueError(f"line {n}: field {i} {problem}")
                 if isinstance(value, list):
@@ -574,11 +575,11 @@ def judge_records(
     the first.
     """
     if isinstance(records, Path):
-        recs = load_records(records)
+        recs = load_records(records, denylist)
     else:
         recs = [Record(id=str(r["id"]), sent=dict(r["sent"]), line=i + 1) for i, r in enumerate(records)]
         # the same shape checks as the file path, through a temp-free round trip
-        _check_records(recs)
+        _check_records(recs, denylist)
     qset = load_question_set(questions_path)
     payloads = question_payloads(qset)
     fingerprint = taxonomy_fingerprint(questions_path)
@@ -647,7 +648,7 @@ def judge_records(
     return rows
 
 
-def _check_records(recs: list[Record]) -> None:
+def _check_records(recs: list[Record], denylist: list[str] | None = None) -> None:
     seen: set[str] = set()
     for r in recs:
         if not r.id.strip():
@@ -658,7 +659,7 @@ def _check_records(recs: list[Record]) -> None:
         if not r.sent:
             raise ValueError(f"record {r.line}: 'sent' must be a non-empty object")
         for i, (name, value) in enumerate(r.sent.items(), start=1):
-            problem = field_name_problem(name)
+            problem = field_name_problem(name, denylist)
             if problem:
                 raise ValueError(f"record {r.line}: field {i} {problem}")
             if isinstance(value, list):

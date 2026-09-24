@@ -14,7 +14,7 @@ from janitor.apply import quarantine, stamp
 from janitor.client import FixtureClient, JanitorClient, TypeSafeJanitorClient, Vote
 from janitor.frontmatter import HARD_EXCERPT_CAP, MAX_EXCERPT, MAX_TITLES, collect_titles
 from janitor.journal import cache_key, canonical, now
-from janitor.index import VaultIndex, body_digest, build_index  # noqa: F401  body_digest re-exported
+from janitor.index import MAX_TITLE_CHARS, VaultIndex, body_digest, build_index  # noqa: F401  body_digest re-exported
 from janitor.plan import PlanEntry, near_misses, plan_vault, rel_folder, root_refusal  # noqa: F401  re-exported
 from janitor.policy import Action, bucket_margin, decide
 from janitor.redact import DEFAULT_SENSITIVE_PATH_PARTS, redact
@@ -39,7 +39,12 @@ def build_state(
     file must never be caused by what a neighbour's title contained.
 
     ``rel_path`` is the vault-relative posix path. The absolute ``note.path`` is never sent:
-    it would leak the OS username and directory tree. ``excerpt_chars`` is the cap on the
+    it would leak the OS username and directory tree. The relative path is redacted like the
+    title, one segment at a time with the separators kept, and its hits count as this note's
+    own: through 0.4.6 it left as written, so ``Meetings/1-1 with Jane Doe.md`` sent the title
+    as ``[NAME]`` and the path in the clear, and a key in a folder name never quarantined.
+    Frontmatter key names are redacted the same way; through 0.4.6 they left as written.
+    ``excerpt_chars`` is the cap on the
     redacted body (0 = whole note); the excerpt is part of the hashed state, so changing the
     cap changes the cache key exactly for the notes whose sent text changes.
 
@@ -60,19 +65,25 @@ def build_state(
     alias_results = [redact(a, denylist=denylist) for a in (aliases or [])]
     # Sibling titles leave the machine too. In 0.1.0 they bypassed redaction and the denylist.
     # Their hits join the reported list: a single-file scan could send a redacted sibling
-    # title while `redacted` claimed nothing had been stripped.
+    # title while `redacted` claimed nothing had been stripped. Each is redacted, THEN cut to
+    # MAX_TITLE_CHARS: through 0.4.6 the index cut first, so a denylisted name or a key that
+    # straddled the cut left as a fragment with no token, the class the body fix in 0.1.2 closed.
     siblings = [redact(t, denylist=denylist) for t in titles]
-    titles = [s.text for s in siblings]
+    titles = [s.text[:MAX_TITLE_CHARS] for s in siblings]
+    segments = [redact(seg, denylist=denylist) for seg in rel_path.split("/")]
+    keys = [redact(k, denylist=denylist) for k in note.keys]
     state = {
         "title": title.text,
-        "path": rel_path,
-        "frontmatter_keys": note.keys,
+        "path": "/".join(s.text for s in segments),
+        "frontmatter_keys": [k.text for k in keys],
         "aliases": [a.text for a in alias_results],
         "excerpt": redacted.text,
         "other_note_titles": titles,
         "graph": dict(facts or {}),
     }
-    own_hits = sorted(set(title.hits + redacted.hits + [h for a in alias_results for h in a.hits]))
+    own = title.hits + redacted.hits + [h for a in alias_results for h in a.hits]
+    own += [h for s in segments for h in s.hits] + [h for k in keys for h in k.hits]
+    own_hits = sorted(set(own))
     return state, sorted(set(own_hits + [h for s in siblings for h in s.hits])), own_hits
 
 

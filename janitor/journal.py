@@ -24,7 +24,8 @@ SCHEMA = 1
 # instruction strings in schema.py, the excerpt cap. A cached vote from another state
 # version is not the same measurement. test_journal pins the digest below so the bump is
 # a deliberate act, not something that is forgotten.
-STATE_VERSION = 12  # 12: Telegram tokens redacted after a bare colon and inside Bot API URLs (0.4.1 sent them)
+STATE_VERSION = 13  # 13: 0.4.7: a password inside a URL is redacted; so are the path and the frontmatter key names; sibling titles are cut after redaction; ASIA ids, PGP and unterminated key blocks, keys after JSON escapes, padded AWS secrets, cards after a leading digit group, denylist entries across whitespace, and more phone shapes are caught. 0.4.6 sent every one of these.
+# 12: Telegram tokens redacted after a bare colon and inside Bot API URLs (0.4.1 sent them)
 # 11: 16 more credential formats redacted (Telegram, Stripe, GitHub gho_/ghu_/ghs_/ghr_, GOCSPX-, Slack/Discord webhooks, xapp-, SendGrid, npm, GitLab, Hugging Face), and the key line is case-sensitive
 # 10: CARD requires a payment-network first digit (2-6)
 # 9: CARD requires a card shape, and is_orphan is unknown on a vault that barely links

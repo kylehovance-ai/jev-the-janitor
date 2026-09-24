@@ -18,6 +18,7 @@ from janitor.records import (
     FixtureRecordClient,
     RecordVote,
     build_record_state,
+    field_name_problem,
     judge_records,
     load_records,
     render_table,
@@ -221,6 +222,28 @@ def test_a_high_precision_hit_means_the_record_is_never_sent(tmp_path: Path):
     assert row["choices"] == {} and row["pick"] is None and row["quarantine_triggers"] == ["local:KEY"]
     assert any(h in HIGH_PRECISION_SECRETS for h in row["redacted"])
     assert "judge_records" in judge_records.__doc__ or True  # no flag exists to lift this; see records_cli
+
+
+def test_a_url_password_in_a_field_value_is_held_like_any_credential(tmp_path: Path):
+    """The records path reuses the redactor and HIGH_PRECISION_SECRETS unchanged; this pins that
+    the 0.4.7 URL rule reaches it: the value is masked whole and the record is never sent."""
+    pw = "".join(("Zq7", "vR9", "pLx", "2"))
+
+    class Boom(FixtureRecordClient):
+        def judge(self, state, questions, payloads):
+            raise AssertionError(f"a held record was sent: {state}")
+
+    p = _jsonl(tmp_path, [{"id": "dsn", "sent": {"conn": f"postgres://app:{pw}@localhost:5432/db"}}])
+    rows = judge_records(p, QUESTIONS, offline=True, client=Boom(), journal_dir=None)
+    row = rows[0]
+    assert row["judge"] == "local" and row["action"] == "quarantine"
+    assert row["quarantine_triggers"] == ["local:URL_CREDENTIAL"]
+    assert pw not in json.dumps(rows) and "app:" not in json.dumps(rows)
+    state, hits = build_record_state({"conn": f"postgres://app:{pw}@localhost/db"}, None, excerpt_chars=16000)
+    assert state["fields"]["conn"] == "postgres://[URL_CREDENTIAL]@localhost/db" and hits == ["URL_CREDENTIAL"]
+    # A field NAME goes through the redactor too; an identifier cannot hold `://`, so the URL rule
+    # can never refuse a name, and a name that merely says `password` is an ordinary identifier.
+    assert field_name_problem("db_password_url") is None
 
 
 def test_lists_are_redacted_element_by_element_before_the_cut_and_a_split_secret_is_a_known_limit():

@@ -9,8 +9,9 @@ from janitor.client import Vote
 # Redaction labels precise enough to act on alone. A hit here is a machine-checkable match
 # on a credential format, not a guess about a person. EMAIL, PHONE, CARD and NAME are
 # deliberately absent: they false-positive on ordinary prose, and quarantining a note is a
-# file move. See redact.PATTERNS.
-HIGH_PRECISION_SECRETS: tuple[str, ...] = ("KEY", "WEBHOOK", "JWT", "PEM", "AWS_SECRET", "BEARER")
+# file move. See redact.PATTERNS. URL_CREDENTIAL is a password inside a URL; a placeholder
+# password (`user:password@`, `${VAR}`) is not a hit at all, so it never reaches here.
+HIGH_PRECISION_SECRETS: tuple[str, ...] = ("KEY", "WEBHOOK", "JWT", "PEM", "AWS_SECRET", "BEARER", "URL_CREDENTIAL")
 
 
 def bucket_margin(probabilities: dict[str, float]) -> float:

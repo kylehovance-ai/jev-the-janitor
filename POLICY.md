@@ -28,12 +28,12 @@ thing this tool moves is a quarantined note, and the only thing it deletes is no
 
 ## Quarantine (move, unchanged, to `_janitor/quarantine/<vault-relative path>`, git-ignored, logged in `manifest.jsonl`)
 
-- **A local redaction hit on a credential format** the machine can check: `KEY`, `JWT`,
-  `PEM`, `AWS_SECRET`, `BEARER`. This fires on its own, before the vote is consulted at
+- **A local redaction hit on a credential format** the machine can check: `KEY`, `WEBHOOK`,
+  `JWT`, `PEM`, `AWS_SECRET`, `BEARER`, `URL_CREDENTIAL`. This fires on its own, before the vote is consulted at
   all. Redaction runs before the request, so Jev is shown `[KEY]` rather than the key and
   cannot confirm what it never saw; waiting for it to agree was the 0.1.1 behaviour and it
   meant a note with a live key in it got a frontmatter stamp and stayed put.
-- **Only this note's own title and body count.** A key inside a *neighbour's* title is
+- **Only this note's own title, aliases, path, frontmatter key names and body count.** A key inside a *neighbour's* title is
   redacted and reported, and never moves this file.
 - `EMAIL`, `PHONE`, `CARD`, `NAME` and `SSN` never quarantine. Those patterns
   false-positive on ordinary prose, and quarantine is a file move.

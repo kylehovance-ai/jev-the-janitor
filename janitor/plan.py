@@ -42,8 +42,18 @@ def plan_vault(
     """
     vault = vault.resolve()
     parts = tuple(sensitive_parts if sensitive_parts is not None else DEFAULT_SENSITIVE_PATH_PARTS)
+    hidden_above: list[str] = []
     if vault.is_file():
         candidates = [vault]
+        # A single file is tested against the hidden folders above it too, from the vault
+        # root (the nearest `.obsidian/` marker) down, or every ancestor when there is no
+        # marker: through 0.4.6 only the file's own name counted, so `.trash/x.md` named
+        # directly was scanned while `jev-janitor ./vault` skipped it. Same quiet rule as a
+        # single file under a sensitive folder: a false skip costs one note. A directory
+        # that is itself hidden is scanned as named.
+        marker = vault_root(vault)
+        ancestors = vault.parent.parts if marker is None else vault.parent.relative_to(marker.parent).parts
+        hidden_above = [part for part in ancestors if part.startswith(".")]
         vault = vault.parent
     else:
         candidates = sorted(vault.rglob("*.md"))
@@ -61,7 +71,7 @@ def plan_vault(
     for path in candidates:
         rel_parts = path.relative_to(vault).parts
         rel = "/".join(rel_parts)
-        hidden = [part for part in rel_parts if part.startswith(".")]
+        hidden = hidden_above + [part for part in rel_parts if part.startswith(".")]
         if hidden:
             entries.append(PlanEntry(rel, "skip_hidden", f"hidden folder or file '{hidden[0]}' (starts with '.')"))
             continue

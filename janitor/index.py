@@ -23,6 +23,8 @@ from typing import Any
 
 from janitor.frontmatter import Note, load_note
 from janitor.plan import PlanEntry, plan_vault, rel_folder
+from janitor.policy import HIGH_PRECISION_SECRETS
+from janitor.redact import redact
 
 # [[target]], [[target|alias]], [[target#heading]], ![[embed]]. Group 1 is the ! for embeds.
 WIKILINK = re.compile(r"(!?)\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|[^\]]*)?\]\]")
@@ -81,6 +83,7 @@ class IndexedNote:
     in_links: int = 0
     aliases: list[str] = field(default_factory=list)  # raw frontmatter aliases; redacted before any use
     locked: bool = False  # janitor.locked: true in frontmatter
+    title_credential: bool = False  # the title itself holds a credential format: never a sibling title
     age_days: int | None = None  # creation age: frontmatter created/date if parseable, else mtime
     age_source: str | None = None  # "frontmatter" | "mtime" | None. mtime-derived age resets on clone, restore or sync
 
@@ -95,7 +98,7 @@ class VaultIndex:
     plan: list[PlanEntry]
     notes: dict[str, IndexedNote]  # every plan entry, in plan order
     by_digest: dict[str, list[str]] = field(default_factory=dict)  # scanned notes only; first rel is canonical
-    by_folder: dict[str, list[str]] = field(default_factory=dict)  # sibling pool: scanned, not sensitive
+    by_folder: dict[str, list[str]] = field(default_factory=dict)  # sibling pool: scanned, not sensitive, title holds no credential
     single_file: bool = False  # the target was one note; in-degree is unknown, not zero
 
     def exact_duplicate_of(self, rel: str) -> str | None:
@@ -112,7 +115,9 @@ class VaultIndex:
         context. Until 0.3.1 the first ``cap`` in plan order (alphabetical) were sent, so in a
         folder of 2,000 notes a near-duplicate of "Zoning appeal" was never listed. Now the
         candidates are ranked by token overlap with the note's own title (ties keep plan
-        order), each title is cut to MAX_TITLE_CHARS, and the ``cap`` closest are sent.
+        order) and the ``cap`` closest are returned, whole: build_state redacts each and
+        only then cuts it to MAX_TITLE_CHARS. (Through 0.4.6 the cut happened here, before
+        redaction, so a name or key straddling character 80 left as a fragment.)
         """
         own = _tokens(own_title or "")
         scored: list[tuple[float, int, str]] = []
@@ -122,7 +127,7 @@ class VaultIndex:
             note = self.notes[other].note
             if note is None:
                 continue
-            title = note.title[:MAX_TITLE_CHARS]
+            title = note.title
             theirs = _tokens(title)
             overlap = len(own & theirs) / len(own | theirs) if own and theirs else 0.0
             scored.append((-overlap, i, title))
@@ -302,7 +307,12 @@ def build_index(
         item.note = note
         item.digest = body_digest(note.body)
         index.by_digest.setdefault(item.digest, []).append(entry.rel)
-        if not entry.sensitive:
+        # A note whose own title carries a credential format is quarantined on its own hit and
+        # is never listed as a sibling, the way a sensitive note is not: its title would go out
+        # as `[KEY]` in every neighbour's list, which is a token, but there is nothing to gain
+        # from listing it and a boundary miss would leak it n times.
+        item.title_credential = any(h in HIGH_PRECISION_SECRETS for h in redact(note.title).hits)
+        if not entry.sensitive and not item.title_credential:
             index.by_folder.setdefault(item.folder, []).append(entry.rel)
         body = note.body
         item.words = len(WORD.findall(body))

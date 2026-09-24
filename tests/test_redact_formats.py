@@ -164,7 +164,11 @@ def test_no_file_in_the_tree_holds_a_credential_shaped_literal():
     added in 0.4.1 is not."""
     from janitor.redact import PATTERNS
 
-    scanners = [pat for label, pat in PATTERNS if label in ("KEY", "WEBHOOK")]
+    # URL_CREDENTIAL joined in 0.4.7: a `scheme://user:password@host` literal in the tree would be
+    # the same kind of fixture; the validator is applied so a placeholder password is not one.
+    from janitor.redact import VALIDATORS
+
+    scanners = [(pat, VALIDATORS.get(label)) for label, pat in PATTERNS if label in ("KEY", "WEBHOOK", "URL_CREDENTIAL")]
     public_since_040 = ("sk-", "AKIA", "AIza", "ghp_", "github_pat_")
     offenders = []
     for path in ROOT.rglob("*"):
@@ -176,9 +180,9 @@ def test_no_file_in_the_tree_holds_a_credential_shaped_literal():
             text = path.read_text(encoding="utf-8")
         except (UnicodeDecodeError, OSError):
             continue
-        for pat in scanners:
+        for pat, validator in scanners:
             for m in pat.finditer(text):
-                if m.group(0).startswith(public_since_040):
+                if m.group(0).startswith(public_since_040) or (validator is not None and not validator(m)):
                     continue
                 offenders.append((path.relative_to(ROOT).as_posix(), m.group(0)[:12] + "..."))
     assert not offenders, offenders

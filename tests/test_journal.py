@@ -64,8 +64,29 @@ FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "notes"
 # Re-pinned 2026-09-23 WITHOUT a bump (still 12): two lines of a docstring in redact.py changed
 # (the illustrative account id in card_shape_ok is now a synthetic one); no pattern, code path
 # or sent byte changed, and the redaction suite passes unchanged.
-RECORDED_STATE_SOURCES_DIGEST = "2c06f6a4e6ab84ce"
-RECORDED_STATE_VERSION = 12
+# Re-pinned 2026-09-24 WITH a bump to 13 (0.4.7, one bump for the release): a password inside a
+# URL is redacted whole, user included, before EMAIL runs (0.4.6 sent a localhost or IP one in
+# the clear and let EMAIL take the password-and-host of a dotted one); the vault-relative path
+# and the frontmatter key names are redacted like the title (0.4.6 sent both as written);
+# sibling titles are cut after redaction, not before; and the redactor catches ASIA key ids,
+# PGP and unterminated private-key blocks, keys after JSON escapes and percent-encoding, JWTs
+# after an underscore, padded AWS secret lines, cards after a leading digit group, denylist
+# entries across whitespace and in their own redacted form, phones after `case`/`id`/`part`
+# and with a leading `+`. Every note holding any of these sends a different state, and the
+# path and key names are in every state, so a note whose path or keys hold nothing sends
+# the same bytes as before; the bump makes the whole 0.4.6 cache a miss on purpose, because
+# a vote on a state that was later found to leak is not the measurement 0.4.7 makes.
+# Re-pinned 2026-09-24 WITHOUT a further bump (still 13, same release), for the rest of 0.4.7:
+# a credential-shaped filename stem is kept whole as the fallback title; a note whose own
+# title holds a credential is dropped from every sibling list; AWS secrets and session tokens
+# named without `aws` are taken; `obsidian://open?vault=Main:Notes@home`-style URLs are not
+# credentials; and a one-to-five-digit password that runs straight into the `@` is a
+# password, not a port. Each moves a sent state only for a note 0.4.6 was already leaking, or
+# one 0.4.7's first cut would have wrongly quarantined; 13 already invalidates the 0.4.6 cache.
+# Re-pinned 2026-09-24 WITHOUT a bump (still 13): a comment in redact.py was reworded; no
+# pattern, code path or sent byte changed, and the redaction suite passes unchanged.
+RECORDED_STATE_SOURCES_DIGEST = "f4283f691300a0e1"
+RECORDED_STATE_VERSION = 13
 
 
 def test_state_version_is_bumped_when_state_sources_change():

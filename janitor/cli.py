@@ -27,7 +27,7 @@ from janitor.journal import (
     read_journal,
     vault_id,
 )
-from janitor.redact import DEFAULT_SENSITIVE_PATH_PARTS
+from janitor.redact import DEFAULT_SENSITIVE_PATH_PARTS, MIN_DENYLIST_CHARS
 from janitor.resume import ResumePlan, load_resume, newest_journal, resume_summary
 from janitor.frontmatter import HARD_EXCERPT_CAP, MAX_EXCERPT
 from janitor.index import build_index
@@ -132,13 +132,21 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def load_denylist(path: Path | None) -> list[str]:
+    """The denylist file, one term per line, `#` comments skipped. Entries under three
+    characters are ignored by the redactor (a two-letter whole word is still a word), and
+    through 0.4.6 that was silent; now it is said once, on stderr, when the file is read."""
     if path is None:
         return []
-    return [
+    terms = [
         line.strip()
         for line in path.read_text(encoding="utf-8").splitlines()
         if line.strip() and not line.startswith("#")
     ]
+    short = [t for t in terms if len(t) < MIN_DENYLIST_CHARS]
+    if short:
+        print(f"denylist: {len(short)} entr{'y' if len(short) == 1 else 'ies'} under {MIN_DENYLIST_CHARS} characters ignored "
+              f"({', '.join(repr(t) for t in short)}): a term that short is an ordinary word as well as a name.", file=sys.stderr)
+    return terms
 
 
 def confirm(prompt: str) -> bool:

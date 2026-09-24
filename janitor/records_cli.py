@@ -63,7 +63,7 @@ def main(argv: list[str] | None = None) -> int:
     excerpt = 0 if str(args.excerpt_chars).lower() == "full" else int(args.excerpt_chars)
     max_usd = DEFAULT_MAX_USD if args.max_usd is None else (args.max_usd or None)
     try:
-        recs = load_records(args.records)
+        recs = load_records(args.records, load_denylist(args.denylist))
         qset = load_question_set(args.questions)
     except ValueError as exc:
         raise SystemExit(f"refused: {exc}") from exc

@@ -103,11 +103,21 @@ class Note:
 
 
 def note_title(path: Path, meta: dict, body: str) -> str:
+    """The frontmatter title, else the first H1, else the filename stem with its separators
+    turned into spaces. A stem the redactor would change is kept as written instead: the
+    separator swap turned `ghp_<36>` into `ghp <36>`, which no pattern matches, so through
+    0.4.6 (and 0.4.7's first cut) a token-shaped filename without a title or H1 became a
+    title that left in the clear, in every sibling's list and, without local triage, as the
+    note's own. Kept whole, the title is redacted to `[KEY]` like any other."""
+    from janitor.redact import redact  # local import: redact has no deps on us
+
     if isinstance(meta.get("title"), str) and meta["title"].strip():
         return meta["title"].strip()
     for line in body.splitlines():
         if line.startswith("# "):
             return line[2:].strip()
+    if redact(path.stem).hits:
+        return path.stem
     return path.stem.replace("-", " ").replace("_", " ")
 
 
@@ -141,7 +151,8 @@ def collect_titles(root: Path, current: Path, sensitive_parts: tuple[str, ...] |
     title leaks meaning. Scope is the note's folder, not the vault, which is also what
     makes the list useful: duplicates live next to each other.
     """
-    from janitor.redact import path_is_sensitive  # local import: redact has no deps on us
+    from janitor.policy import HIGH_PRECISION_SECRETS
+    from janitor.redact import path_is_sensitive, redact  # local import: redact has no deps on us
 
     titles: list[str] = []
     for path in sorted(current.parent.glob("*.md")):
@@ -159,6 +170,8 @@ def collect_titles(root: Path, current: Path, sensitive_parts: tuple[str, ...] |
             note = load_note(path)
         except Exception:
             continue
+        if any(h in HIGH_PRECISION_SECRETS for h in redact(note.title).hits):
+            continue  # its own hit quarantines it; it is never sibling context (index.build_index does the same)
         titles.append(note.title)
         if len(titles) >= MAX_TITLES:
             break
