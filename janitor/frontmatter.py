@@ -142,8 +142,33 @@ def load_note(path: Path) -> Note:
     )
 
 
-def collect_titles(root: Path, current: Path, sensitive_parts: tuple[str, ...] | None = None) -> list[str]:
-    """Titles of the other notes in ``current``'s own folder, for duplicate detection.
+_TITLE_TOKENS = re.compile(r"[a-z0-9]+")
+
+
+def title_tokens(text: str) -> set[str]:
+    return set(_TITLE_TOKENS.findall(text.lower()))
+
+
+def rank_by_overlap(own_title: str | None, candidates: list[str], cap: int) -> list[str]:
+    """The ``cap`` candidate titles closest to ``own_title`` by token overlap, ties in the
+    given order. One function for both scan paths: through 0.4.7 a single-file scan took the
+    alphabetical first ``cap`` while a directory scan ranked by overlap, so with 81 siblings
+    the single-file scan dropped the one near-duplicate title the directory scan kept."""
+    own = title_tokens(own_title or "")
+    scored: list[tuple[float, int, str]] = []
+    for i, title in enumerate(candidates):
+        theirs = title_tokens(title)
+        overlap = len(own & theirs) / len(own | theirs) if own and theirs else 0.0
+        scored.append((-overlap, i, title))
+    scored.sort()
+    return [t for _, _, t in scored[:cap]]
+
+
+def collect_titles(root: Path, current: Path, sensitive_parts: tuple[str, ...] | None = None,
+                   own_title: str | None = None) -> list[str]:
+    """Titles of the other notes in ``current``'s own folder, for duplicate detection: every
+    candidate is read, then the MAX_TITLES closest by overlap with ``own_title`` are returned,
+    the same ranking as a directory scan (rank_by_overlap).
 
     Privacy contract: this list leaves the machine as ``other_note_titles``. It therefore
     never includes a note on a sensitive path (``family/``, ``private/`` ...) or anything
@@ -173,6 +198,4 @@ def collect_titles(root: Path, current: Path, sensitive_parts: tuple[str, ...] |
         if any(h in HIGH_PRECISION_SECRETS for h in redact(note.title).hits):
             continue  # its own hit quarantines it; it is never sibling context (index.build_index does the same)
         titles.append(note.title)
-        if len(titles) >= MAX_TITLES:
-            break
-    return titles
+    return rank_by_overlap(own_title, titles, MAX_TITLES)

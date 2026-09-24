@@ -21,7 +21,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from janitor.frontmatter import Note, load_note
+from janitor.frontmatter import Note, load_note, rank_by_overlap
 from janitor.plan import PlanEntry, plan_vault, rel_folder
 from janitor.policy import HIGH_PRECISION_SECRETS
 from janitor.redact import redact
@@ -119,20 +119,14 @@ class VaultIndex:
         only then cuts it to MAX_TITLE_CHARS. (Through 0.4.6 the cut happened here, before
         redaction, so a name or key straddling character 80 left as a fragment.)
         """
-        own = _tokens(own_title or "")
-        scored: list[tuple[float, int, str]] = []
-        for i, other in enumerate(self.by_folder.get(rel_folder(rel), [])):
+        candidates = []
+        for other in self.by_folder.get(rel_folder(rel), []):
             if other == rel:
                 continue
             note = self.notes[other].note
-            if note is None:
-                continue
-            title = note.title
-            theirs = _tokens(title)
-            overlap = len(own & theirs) / len(own | theirs) if own and theirs else 0.0
-            scored.append((-overlap, i, title))
-        scored.sort()
-        return [t for _, _, t in scored[:cap]]
+            if note is not None:
+                candidates.append(note.title)
+        return rank_by_overlap(own_title, candidates, cap)
 
     @property
     def linking_share(self) -> float:

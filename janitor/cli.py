@@ -394,7 +394,8 @@ def main(argv: list[str] | None = None) -> int:
     fresh_items = [it for it in items if it.cached_row is None and it.error is None]
     retries = sum(1 for it in fresh_items if resume is not None and it.rel in resume.error_paths)
     summary = preflight_summary(vault, plan, sensitive_parts=sensitive_parts, live=live, cached=cached_hits,
-                                excerpt_chars=args.excerpt_chars, guard_truncated=guard_truncated)
+                                excerpt_chars=args.excerpt_chars, guard_truncated=guard_truncated,
+                                survey=len(survey.items) if survey is not None else None)
     if resume is not None:
         summary = resume_summary(resume, cached_hits=cached_hits, retries=retries, fresh=len(fresh_items) - retries) + "\n" + summary
     summary = "  " + profile.describe() + "\n" + summary

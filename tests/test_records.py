@@ -227,19 +227,19 @@ def test_a_high_precision_hit_means_the_record_is_never_sent(tmp_path: Path):
 def test_a_url_password_in_a_field_value_is_held_like_any_credential(tmp_path: Path):
     """The records path reuses the redactor and HIGH_PRECISION_SECRETS unchanged; this pins that
     the 0.4.7 URL rule reaches it: the value is masked whole and the record is never sent."""
-    pw = "".join(("Zq7", "vR9", "pLx", "2"))
+    password = "".join(("Zq7", "vR9", "pLx", "2"))
 
     class Boom(FixtureRecordClient):
         def judge(self, state, questions, payloads):
             raise AssertionError(f"a held record was sent: {state}")
 
-    p = _jsonl(tmp_path, [{"id": "dsn", "sent": {"conn": f"postgres://app:{pw}@localhost:5432/db"}}])
+    p = _jsonl(tmp_path, [{"id": "dsn", "sent": {"conn": f"postgres://app:{password}@localhost:5432/db"}}])
     rows = judge_records(p, QUESTIONS, offline=True, client=Boom(), journal_dir=None)
     row = rows[0]
     assert row["judge"] == "local" and row["action"] == "quarantine"
     assert row["quarantine_triggers"] == ["local:URL_CREDENTIAL"]
-    assert pw not in json.dumps(rows) and "app:" not in json.dumps(rows)
-    state, hits = build_record_state({"conn": f"postgres://app:{pw}@localhost/db"}, None, excerpt_chars=16000)
+    assert password not in json.dumps(rows) and "app:" not in json.dumps(rows)
+    state, hits = build_record_state({"conn": f"postgres://app:{password}@localhost/db"}, None, excerpt_chars=16000)
     assert state["fields"]["conn"] == "postgres://[URL_CREDENTIAL]@localhost/db" and hits == ["URL_CREDENTIAL"]
     # A field NAME goes through the redactor too; an identifier cannot hold `://`, so the URL rule
     # can never refuse a name, and a name that merely says `password` is an ordinary identifier.

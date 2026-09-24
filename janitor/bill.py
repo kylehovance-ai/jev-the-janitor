@@ -20,8 +20,8 @@ synthetic corpus tier (1,468 notes before it was stopped for an unrelated reason
 payload chars, 2,604,345 tokens, 2026-09-22) measured 2.17 overall, 2.04 to 3.53 per note,
 on generated combinatorial filler (ids, hashes, log-like lines) that tokenizes far more
 densely than prose. Synthetic, so by the rule above no constant moves on it; but any vault
-full of generated logs, ids or code will look like it, and the pessimistic estimate was 35%
-light. So the ceiling does two jobs now: the pre-flight refuses on the estimate, and the run
+full of generated logs, ids or code will look like it, and the pessimistic estimate was 22.5%
+light (2.17 against the 2.8 anchor; the bill came in 29% over it). So the ceiling does two jobs now: the pre-flight refuses on the estimate, and the run
 stops on the meter (scan.meter_check) when the API's own input_tokens have cost more than
 the ceiling, whatever the text. With --over-budget the accepted bill's pessimistic end is
 the meter's limit, so an accepted bill is never an unbounded one.

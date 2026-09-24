@@ -1,11 +1,11 @@
 """A password inside a URL is redacted whole, before EMAIL can half-take it, and quarantines.
 
-Measured on 0.4.6 with a synthetic password assembled at runtime (written ``<pw>`` here, which
-the rule itself reads as a placeholder): ``postgres://app:<pw>@localhost``, ``redis://:<pw>@127.0.0.1``,
-``jdbc:mysql://app:<pw>@10.0.0.5`` and ``DATABASE_URL=postgres://…`` went out in the clear with
-no hit at all. ``postgresql://app:<pw>@db.example.com`` was masked by accident: EMAIL took
-``<pw>@db.example.com``, the user was still sent, the row read hits=['EMAIL'], and EMAIL does
-not quarantine. The same accident for ``mongodb+srv://`` and ``https://user:<pw>@host``. The one real credential a gate scan found in a real vault was a
+Measured on 0.4.6 with a synthetic password assembled at runtime (written ``<password>`` here, which
+the rule itself reads as a placeholder): ``postgres://app:<password>@localhost``, ``redis://:<password>@127.0.0.1``,
+``jdbc:mysql://app:<password>@10.0.0.5`` and ``DATABASE_URL=postgres://…`` went out in the clear with
+no hit at all. ``postgresql://app:<password>@db.example.com`` was masked by accident: EMAIL took
+``<password>@db.example.com``, the user was still sent, the row read hits=['EMAIL'], and EMAIL does
+not quarantine. The same accident for ``mongodb+srv://`` and ``https://user:<password>@host``. The one real credential a gate scan found in a real vault was a
 localhost database password in exactly this shape.
 
 Every password here is assembled at runtime from pieces, so no line of this file is a
@@ -39,31 +39,31 @@ def _no_fragment(secret: str, text: str, ctx: object) -> None:
 
 
 LEAKED_THROUGH_046 = {
-    # name: (text with {pw}, expected redacted text)
-    "postgres localhost with port": ("postgres://app:{pw}@localhost:5432/db", "postgres://[URL_CREDENTIAL]@localhost:5432/db"),
-    "redis, no user": ("redis://:{pw}@127.0.0.1:6379/0", "redis://[URL_CREDENTIAL]@127.0.0.1:6379/0"),
-    "jdbc two-part scheme": ("jdbc:mysql://app:{pw}@10.0.0.5:3306/db", "jdbc:mysql://[URL_CREDENTIAL]@10.0.0.5:3306/db"),
-    "env assignment": ("DATABASE_URL=postgres://app:{pw}@localhost/db", "DATABASE_URL=postgres://[URL_CREDENTIAL]@localhost/db"),
-    "sqlalchemy driver suffix, ipv6 host": ("postgresql+psycopg2://app:{pw}@[::1]:5432/db", "postgresql+psycopg2://[URL_CREDENTIAL]@[::1]:5432/db"),
-    "amqp": ("amqp://app:{pw}@localhost:5672/", "amqp://[URL_CREDENTIAL]@localhost:5672/"),
-    "quoted in code": ("url = 'mysql://app:{pw}@localhost/db'", "url = 'mysql://[URL_CREDENTIAL]@localhost/db'"),
-    "in parentheses": ("see (postgres://app:{pw}@localhost) now", "see (postgres://[URL_CREDENTIAL]@localhost) now"),
+    # name: (text with {password}, expected redacted text)
+    "postgres localhost with port": ("postgres://app:{password}@localhost:5432/db", "postgres://[URL_CREDENTIAL]@localhost:5432/db"),
+    "redis, no user": ("redis://:{password}@127.0.0.1:6379/0", "redis://[URL_CREDENTIAL]@127.0.0.1:6379/0"),
+    "jdbc two-part scheme": ("jdbc:mysql://app:{password}@10.0.0.5:3306/db", "jdbc:mysql://[URL_CREDENTIAL]@10.0.0.5:3306/db"),
+    "env assignment": ("DATABASE_URL=postgres://app:{password}@localhost/db", "DATABASE_URL=postgres://[URL_CREDENTIAL]@localhost/db"),
+    "sqlalchemy driver suffix, ipv6 host": ("postgresql+psycopg2://app:{password}@[::1]:5432/db", "postgresql+psycopg2://[URL_CREDENTIAL]@[::1]:5432/db"),
+    "amqp": ("amqp://app:{password}@localhost:5672/", "amqp://[URL_CREDENTIAL]@localhost:5672/"),
+    "quoted in code": ("url = 'mysql://app:{password}@localhost/db'", "url = 'mysql://[URL_CREDENTIAL]@localhost/db'"),
+    "in parentheses": ("see (postgres://app:{password}@localhost) now", "see (postgres://[URL_CREDENTIAL]@localhost) now"),
 }
 
 HALF_EATEN_BY_EMAIL_THROUGH_046 = {
-    "postgresql dotted host": ("postgresql://app:{pw}@db.example.com:5432/db", "postgresql://[URL_CREDENTIAL]@db.example.com:5432/db"),
-    "mongodb+srv": ("mongodb+srv://app:{pw}@cluster0.abc.mongodb.net/db?retryWrites=true", "mongodb+srv://[URL_CREDENTIAL]@cluster0.abc.mongodb.net/db?retryWrites=true"),
-    "https basic auth": ("https://user:{pw}@host.example.com/path?q=1#frag", "https://[URL_CREDENTIAL]@host.example.com/path?q=1#frag"),
-    "ftp": ("ftp://user:{pw}@files.example.org/pub", "ftp://[URL_CREDENTIAL]@files.example.org/pub"),
-    "smtp": ("smtp://user:{pw}@mail.example.org:587", "smtp://[URL_CREDENTIAL]@mail.example.org:587"),
-    "ldap": ("ldap://cn=admin,dc=x:{pw}@ldap.example.org", "ldap://[URL_CREDENTIAL]@ldap.example.org"),
+    "postgresql dotted host": ("postgresql://app:{password}@db.example.com:5432/db", "postgresql://[URL_CREDENTIAL]@db.example.com:5432/db"),
+    "mongodb+srv": ("mongodb+srv://app:{password}@cluster0.abc.mongodb.net/db?retryWrites=true", "mongodb+srv://[URL_CREDENTIAL]@cluster0.abc.mongodb.net/db?retryWrites=true"),
+    "https basic auth": ("https://user:{password}@host.example.com/path?q=1#frag", "https://[URL_CREDENTIAL]@host.example.com/path?q=1#frag"),
+    "ftp": ("ftp://user:{password}@files.example.org/pub", "ftp://[URL_CREDENTIAL]@files.example.org/pub"),
+    "smtp": ("smtp://user:{password}@mail.example.org:587", "smtp://[URL_CREDENTIAL]@mail.example.org:587"),
+    "ldap": ("ldap://cn=admin,dc=x:{password}@ldap.example.org", "ldap://[URL_CREDENTIAL]@ldap.example.org"),
 }
 
 
 @pytest.mark.parametrize("name", list(LEAKED_THROUGH_046) + list(HALF_EATEN_BY_EMAIL_THROUGH_046))
 def test_url_password_is_redacted_whole_user_included_and_quarantines(name: str):
     text, expected = {**LEAKED_THROUGH_046, **HALF_EATEN_BY_EMAIL_THROUGH_046}[name]
-    result = redact(text.format(pw=PW))
+    result = redact(text.format(password=PW))
     assert result.text == expected, name
     assert result.hits == ["URL_CREDENTIAL"], (name, result.hits)  # not EMAIL: this rule runs first
     assert "URL_CREDENTIAL" in HIGH_PRECISION_SECRETS
@@ -78,15 +78,15 @@ def test_url_credential_runs_before_every_other_pattern():
 
 
 @pytest.mark.parametrize("context", [
-    "postgres://app:{pw}@localhost/db",
-    "postgres://app:{pw}@db.example.com/db",
-    "redis://:{pw}@localhost",
-    "DATABASE_URL=postgres://app:{pw}@localhost:5432/db\nnext line",
+    "postgres://app:{password}@localhost/db",
+    "postgres://app:{password}@db.example.com/db",
+    "redis://:{password}@localhost",
+    "DATABASE_URL=postgres://app:{password}@localhost:5432/db\nnext line",
 ])
 def test_unencoded_at_and_colon_in_the_password_run_to_the_last_at(context: str):
     """People write `p@ss:w0rd` unencoded. The match takes everything up to the LAST `@`
     before the host, so no fragment of the password leaves and the host is the host."""
-    result = redact(context.format(pw=TRICKY))
+    result = redact(context.format(password=TRICKY))
     assert result.hits == ["URL_CREDENTIAL"], result
     _no_fragment(TRICKY, result.text, context)
     assert "[URL_CREDENTIAL]@" in result.text
@@ -103,7 +103,7 @@ def test_unencoded_at_and_colon_in_the_password_run_to_the_last_at(context: str)
 def test_placeholder_passwords_are_left_untouched_and_do_not_quarantine(placeholder: str):
     """Documentation, not a credential. `postgres://user:password@localhost` is in every second
     dev note; quarantining each one would bury the review pile."""
-    text = f"postgres://user:{placeholder}@localhost:5432/db"
+    text = "postgres://user:" + placeholder + "@localhost:5432/db"
     result = redact(text)
     assert result.text == text, placeholder
     assert result.hits == [], placeholder
@@ -143,7 +143,7 @@ def test_a_default_such_as_guest_guest_is_a_credential_not_a_placeholder():
 
 def test_a_key_format_inside_the_userinfo_goes_out_as_one_url_credential():
     token = j("gh", "p_", "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8")
-    result = redact(f"https://x-access-token:{token}@github.com/org/repo.git")
+    result = redact("https://x-access-token:" + token + "@github.com/org/repo.git")
     assert result.text == "https://[URL_CREDENTIAL]@github.com/org/repo.git"
     assert result.hits == ["URL_CREDENTIAL"]
     _no_fragment(token, result.text, "ghp in userinfo")
@@ -155,9 +155,9 @@ def test_any_non_whitespace_character_may_sit_inside_the_password(special: str):
     quotes, so `app:PW#1@localhost` went out whole with no hit, and on a dotted host EMAIL
     half-took it again. Those characters are common in passwords and, unencoded, turn up
     exactly in the malformed URLs people paste into notes."""
-    pw = j("Zq7", special, "vR", "9x")
+    password = j("Zq7", special, "vR", "9x")
     for host in ("localhost:5432/db", "db.example.com/db"):
-        result = redact(f"postgres://app:{pw}@{host}")
+        result = redact(f"postgres://app:{password}@{host}")
         assert result.hits == ["URL_CREDENTIAL"], (special, host, result)
         assert result.text == f"postgres://[URL_CREDENTIAL]@{host}", (special, host)
 
@@ -180,11 +180,11 @@ def test_a_real_password_that_starts_with_a_dollar_sign_or_percent_is_not_a_plac
     """`$VAR` and `%VAR%` are placeholders only in UPPER_SNAKE, case-sensitively: `$Zq7vR2mW9x` is
     a password that starts with a dollar sign. The residual: an all-caps password starting
     with `$` reads as a placeholder."""
-    for pw in ("$" + PW, "%" + PW + "%", "$db_password", "%db_password%", "$Db_Password"):
-        result = redact(f"postgres://app:{pw}@localhost/db")
-        assert result.text == "postgres://[URL_CREDENTIAL]@localhost/db", pw
+    for password in ("$" + PW, "%" + PW + "%", "$db_password", "%db_password%", "$Db_Password"):
+        result = redact(f"postgres://app:{password}@localhost/db")
+        assert result.text == "postgres://[URL_CREDENTIAL]@localhost/db", password
     for placeholder in ("$DB_PASSWORD", "%DB_PASSWORD%", "${db_password}", "$ZQ7VR2MW9X"):
-        assert redact(f"postgres://app:{placeholder}@localhost/db").hits == [], placeholder
+        assert redact("postgres://app:" + placeholder + "@localhost/db").hits == [], placeholder
 
 
 class RecordingClient(FixtureClient):

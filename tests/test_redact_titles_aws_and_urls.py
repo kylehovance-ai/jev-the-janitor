@@ -160,8 +160,8 @@ def test_digits_that_run_straight_into_the_at_sign_are_a_password_not_a_port(sch
 
 
 def test_a_real_password_still_wins_next_to_those_shapes():
-    pw = j("Zq7", "?vR", "9x")
-    for text in ("postgres://app:" + pw + "@localhost/db", "http://user:" + pw + "#1@host.example.com/x?y=1"):
+    password = j("Zq7", "?vR", "9x")
+    for text in ("postgres://app:" + password + "@localhost/db", "http://user:" + password + "#1@host.example.com/x?y=1"):
         result = redact(text)
         assert result.hits == ["URL_CREDENTIAL"], text
         assert "Zq7" not in result.text

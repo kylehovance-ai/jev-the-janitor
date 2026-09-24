@@ -696,3 +696,100 @@ def test_an_aborted_footer_without_a_reason_reads_as_stopped(tmp_path: Path):
     q = tmp_path / "run-20260101T000001-fffffff.jsonl"
     q.write_text("[1, 2]\n42\n", encoding="utf-8")  # JSON, but not objects: no header, no footer, no crash
     assert read_journal_ends(q) == (None, None)
+
+
+# --- 0.4.8: no file I/O in workers; the writer stamps or moves, then records, in one step ---------
+
+class Gated(FixtureClient):
+    """The first ``parties`` requests all block at a barrier until every one of them has
+    arrived, then complete together: several futures finish work() at once, deterministically,
+    without a sleep. Later requests return at once. One chosen note votes as a secret."""
+
+    def __init__(self, parties: int, secret_path: str | None = None) -> None:
+        self.barrier = threading.Barrier(parties)
+        self.parties = parties
+        self.secret_path = secret_path
+        self.seen = 0
+        self.lock = threading.Lock()
+
+    def vote(self, state, questions):
+        with self.lock:
+            self.seen += 1
+            gate = self.seen <= self.parties
+        if gate:
+            self.barrier.wait(timeout=10)
+        v = super().vote(state, questions)
+        if self.secret_path and state["path"].replace("\\", "/") == self.secret_path:
+            v = Vote(**{**v.__dict__, "contains_secret": 0.95})
+        return v
+
+
+def _consistent(vault: Path, recorded: list[dict]) -> None:
+    stamped = {p.name for p in vault.glob("*.md") if "janitor:" in p.read_text(encoding="utf-8")}
+    with_row = {r["path"] for r in recorded if r.get("applied") and r["applied"].startswith("frontmatter")}
+    assert stamped == with_row, (stamped, with_row)
+    moved = {p.relative_to(vault).as_posix() for p in (vault / "_janitor" / "quarantine").rglob("*.md")} if (vault / "_janitor").exists() else set()
+    moved_rows = {r["applied"].split(":", 1)[1] for r in recorded if r.get("applied", "") and r["applied"].startswith("quarantine:")}
+    assert moved == moved_rows, (moved, moved_rows)
+
+
+def test_interrupt_in_the_writer_with_several_futures_already_complete_writes_no_file_without_a_row(tmp_path: Path):
+    """Deterministic: three workers, three requests released together by a barrier, so three
+    futures have fully completed work() before the writer records the first one and on_row
+    raises there. Through 0.4.7 those three had already stamped their files in the worker
+    threads; the interrupt inside the writer then skipped the drain, so two stamped notes had
+    no row and --resume re-sent them. Now nothing touches disk outside the writer."""
+    vault = _vault(tmp_path, 12)
+    root, plan, items, fp = prepare_vault(vault)
+    engine = Gated(parties=3)
+    recorded: list[dict] = []
+
+    def on_row(row):
+        recorded.append(row)
+        raise KeyboardInterrupt  # inside the writer, on the very first row
+
+    with pytest.raises(KeyboardInterrupt):
+        run_prepared(root, plan, items, engine=engine, questions={}, fingerprint=fp, workers=3, on_row=on_row, apply=True)
+    assert engine.seen >= 3 and len(recorded) == 1
+    _consistent(vault, recorded)
+    assert len({p.name for p in vault.glob("*.md") if "janitor:" in p.read_text(encoding="utf-8")}) == 1
+
+
+def test_interrupt_in_the_writer_moves_no_quarantined_note_without_a_row(tmp_path: Path):
+    """The quarantine case: a note the engine judges a secret, completed in a worker before the
+    interrupt, must still sit where it was, because a move without a row is a note with no
+    record of where it went."""
+    vault = _vault(tmp_path, 12)
+    root, plan, items, fp = prepare_vault(vault)
+    engine = Gated(parties=3, secret_path="n001.md")
+    recorded: list[dict] = []
+
+    def on_row(row):
+        recorded.append(row)
+        if row["path"] != "n001.md":
+            raise KeyboardInterrupt  # let the secret note through only if it happens to be recorded first
+
+    try:
+        run_prepared(root, plan, items, engine=engine, questions={}, fingerprint=fp, workers=3, on_row=on_row, apply=True)
+    except KeyboardInterrupt:
+        pass
+    _consistent(vault, recorded)
+    secret_row = next((r for r in recorded if r["path"] == "n001.md"), None)
+    if secret_row is None:
+        assert (vault / "n001.md").exists(), "moved without a row"
+    else:
+        assert secret_row["applied"].startswith("quarantine:") and not (vault / "n001.md").exists()
+
+
+def test_a_result_drained_after_a_meter_stop_is_recorded_unapplied(tmp_path: Path):
+    """A stop (not an interrupt) drains the in-flight results: they are recorded, billed, and
+    under --apply left unapplied (applied=None), for --resume to apply from the row."""
+    vault = _vault(tmp_path, 40)
+    root, plan, items, fp = prepare_vault(vault)
+    engine = Counting(sleep=0.01)
+    recorded: list[dict] = []
+    with pytest.raises(ScanAborted):
+        run_prepared(root, plan, items, engine=engine, questions={}, fingerprint=fp, workers=WORKERS,
+                     on_row=recorded.append, apply=True, spend_limit=3 * TOKENS / 1e6 * PRICE_PER_MILLION_USD)
+    _consistent(vault, recorded)
+    assert any(r.get("applied") is None for r in recorded if r.get("kind") == "vote")

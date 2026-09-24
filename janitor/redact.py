@@ -91,14 +91,34 @@ URL_CREDENTIAL = re.compile(
 # A placeholder where the password goes is documentation, not a credential, and is left
 # untouched (no hit, no quarantine): template syntax (`${...}` in any case; a bare `$VAR` or
 # `%VAR%` only in UPPER_SNAKE, because `$Zq7vR2mW9x` is a password that starts with a
-# dollar sign, and an all-caps password that starts with `$` is the residual this leaves);
-# a bracketed word (`{{ var }}`, `{var}`, `<password>`, `[password]`); the words `password`,
+# dollar sign, and an all-caps password that starts with `$` is the residual this leaves;
+# `{{ var }}` in any case); a bracketed placeholder (`{DB_PASSWORD}`, `<password>`,
+# `[password]`, `<your password here>`: see _bracketed_placeholder); the words `password`,
 # `passwd`, `pass`, `pwd`, `secret`, `changeme` and `changeit` in any case; and a run of `x`,
 # `*` or dots. `postgres://user:password@localhost` is in every second dev note; quarantining
 # each one would bury the review pile. Anything else is a credential, including a default
 # such as `guest` with the password `guest`: on a real host that is exactly what must not leave.
-URL_PASSWORD_TEMPLATE = re.compile(r"^(?:\$\{[^}]*\}|\$[A-Z_][A-Z0-9_]*|%[A-Z_][A-Z0-9_]*%|\{.*\}|<.*>|\[.*\])$")
+URL_PASSWORD_TEMPLATE = re.compile(r"^(?:\$\{[^}]*\}|\$[A-Z_][A-Z0-9_]*|%[A-Z_][A-Z0-9_]*%|\{\{.*\}\})$")
 URL_PASSWORD_WORD = re.compile(r"(?i)^(?:password|passwd|pass|pwd|secret|changeme|changeit|x+|\*+|\.{2,}|…+)$")
+URL_PASSWORD_WORDS = ("password", "passwd", "pass", "pwd", "secret", "changeme", "changeit")
+# One layer of brackets, `{…}`, `<…>` or `[…]`: a placeholder only when what is INSIDE is one.
+# Through 0.4.7 any bracketed value was a placeholder, so `{MyRealPassword}` went out with no
+# hit and no quarantine. No syntactic rule tells `<password>` from `<MyRealPassword>`, so the
+# inside must itself be a placeholder word alone or as a whole word (`<your password here>`),
+# an UPPER_SNAKE name (`{DB_PASSWORD}`), or a run of x, * or dots.
+URL_PASSWORD_BRACKETED = re.compile(r"^(?:\{(?P<b>[^{}]*)\}|<(?P<a>[^<>]*)>|\[(?P<s>[^\[\]]*)\])$")
+URL_PASSWORD_INSIDE_WORD = re.compile(r"(?i)(?<![A-Za-z0-9])(?:" + "|".join(URL_PASSWORD_WORDS) + r")(?![A-Za-z0-9])")
+URL_PASSWORD_INSIDE_UPPER = re.compile(r"^[A-Z_][A-Z0-9_]*$")
+
+
+def _bracketed_placeholder(password: str) -> bool:
+    m = URL_PASSWORD_BRACKETED.match(password)
+    if not m:
+        return False
+    inside = (m.group("b") or m.group("a") or m.group("s") or "").strip()
+    return bool(inside) and (URL_PASSWORD_WORD.match(inside) is not None
+                             or URL_PASSWORD_INSIDE_WORD.search(inside) is not None
+                             or URL_PASSWORD_INSIDE_UPPER.match(inside) is not None)
 # A port, literal or templated, followed by a path, query or fragment: `localhost:8080/x?a@b`
 # and `localhost:${PORT}/api/users/@me` are URLs with a later `@`, not credentials. The user
 # part likewise stops at `?` or `#` (RFC 3986: both end the authority), which is what keeps
@@ -113,10 +133,25 @@ URL_PASSWORD_WORD = re.compile(r"(?i)^(?:password|passwd|pass|pwd|secret|changem
 URL_PORT_NOT_PASSWORD = re.compile(r"^(?:\d{1,5}|\$\{[^}]*\}|\$[A-Z_][A-Z0-9_]*|%[A-Z_][A-Z0-9_]*%)[/?#]")
 
 
+# A templated user or host: `{user}`, `${HOST}`, `<host>`, `%HOST%`. In an f-string or a template
+# URL the other parts are templated too, which is the evidence that a bracketed password is a
+# template and not a value: `f"postgres://{user}:{db_pw}@{host}/{db}"` is code, not a leak.
+URL_PART_TEMPLATE = re.compile(r"^(?:\{[^{}]*\}|\$\{[^}]*\}|<[^<>]*>|%[A-Za-z_][A-Za-z0-9_]*%)$")
+
+
+def _templated_neighbours(m: re.Match[str]) -> bool:
+    user = m.group(2)
+    host = re.split(r"[/:?#]", m.group(4), maxsplit=1)[0]
+    return bool(URL_PART_TEMPLATE.match(user)) or bool(URL_PART_TEMPLATE.match(host))
+
+
 def url_password_is_real(m: re.Match[str]) -> bool:
-    """The userinfo is replaced unless the password is a placeholder or is really a port."""
+    """The userinfo is replaced unless the password is a placeholder, the URL around it is a
+    template (a templated user or host), or the "password" is really a port."""
     password = m.group(3)
-    if URL_PASSWORD_TEMPLATE.match(password) or URL_PASSWORD_WORD.match(password):
+    if URL_PASSWORD_TEMPLATE.match(password) or URL_PASSWORD_WORD.match(password) or _bracketed_placeholder(password):
+        return False
+    if URL_PASSWORD_BRACKETED.match(password) and _templated_neighbours(m):
         return False
     return URL_PORT_NOT_PASSWORD.match(password) is None
 

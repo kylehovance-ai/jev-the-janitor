@@ -96,8 +96,11 @@ def preflight_summary(
     cached: int = 0,
     excerpt_chars: int = MAX_EXCERPT,
     guard_truncated: int = 0,
+    survey: int | None = None,
 ) -> str:
-    """What is about to leave the machine, folder by folder, before it does."""
+    """What is about to leave the machine, folder by folder, before it does. Under --survey
+    the header names the sample: through 0.4.7 it said every scanned note would be sent
+    while the bill and the SURVEY line named the sample."""
     to_scan = [e for e in entries if e.status == "scan"]
     skipped = [e for e in entries if e.status != "scan"]
     included = Counter(e.folder for e in to_scan)
@@ -106,6 +109,8 @@ def preflight_summary(
     where = "will be sent to TypeSafe" if live else "will be judged by the offline fixture client (nothing leaves the machine)"
     sending = len(to_scan) - cached
     served = f" ({cached} served from the journal, not sent)" if cached else ""
+    if survey is not None:
+        sending, served = survey, f" (a survey sample; the other {len(to_scan) - cached - survey} eligible notes are not sent){served}"
     lines = [f"jev-janitor pre-flight: {sending} of {len(entries)} notes under {vault.name}/ {where}{served}"]
     if excerpt_chars == MAX_EXCERPT:
         lines.append(f"  excerpt: the first {MAX_EXCERPT:,} characters of each note after redaction (default)")
@@ -233,7 +238,7 @@ def prepare_vault(
             if entry.sensitive:
                 titles: list[str] = []  # a sensitive note gets no sibling context and gives none
             elif index.single_file:
-                titles = collect_titles(root, ix.path, sensitive_parts=sensitive_parts)
+                titles = collect_titles(root, ix.path, sensitive_parts=sensitive_parts, own_title=note.title)
             else:
                 titles = index.sibling_titles(entry.rel, MAX_TITLES, own_title=note.title)
             item.state, item.hits, item.own_hits = build_state(
@@ -376,8 +381,9 @@ def run_prepared(
     ``spend_limit`` is the ceiling in dollars applied to what the API actually charged, row
     by row, from ``input_tokens``. The pre-flight guards the estimate; this guards the run.
     The first live run on generated filler measured 2.17 chars/token against a pessimistic
-    anchor of 2.8, so the estimate was 35% light and the estimate-only guard would have let
-    the ceiling be passed by a third before the measured line said a word. ``question_chars``
+    anchor of 2.8, so the estimate was 22.5% light (the bill came in 29% over it) and the
+    estimate-only guard would have let the ceiling be passed by more than a quarter before
+    the measured line said a word. ``question_chars``
     is added once per metered call so the ratio the abort message prints is on the same
     basis as the range and the measured line (payload plus questions); the first cut counted
     the payload alone and would have printed 0.99 for text that measures 2.17.
@@ -402,7 +408,29 @@ def run_prepared(
     state = {"cache_enabled": True, "sent": 0, "errors": 0, "drift_checked": False, "tokens": 0, "chars": 0, "metered": 0, "stop": False,
              "in_writer": False, "writer_failed": False}
 
+    def apply_item(item: Prepared, vote: Vote, action: Action) -> str:
+        """Stamp or quarantine one note. Called from the writer thread only, right before its
+        row is emitted, so a file never changes without a row that says so.
+
+        Through 0.4.7 (since 0.4.6) this ran inside work(), in the worker thread, before the
+        writer had the result. Under load workers run ahead of the writer, so when a Ctrl-C
+        landed inside the writer (which deliberately does not drain) every future that had
+        already finished work() had already stamped, or MOVED, its file and never got a row:
+        --resume then re-sent and re-billed a stamped note, and a quarantined note was moved
+        with no record of where. The `not state["stop"]` check only blocked writes that
+        started after the stop; it could not undo ones that had finished before it.
+        """
+        if item.frontmatter_error:
+            applied = "unchanged: frontmatter unreadable"  # a header we cannot read is one we must not rewrite
+        else:
+            applied = "frontmatter" if stamp(item.path, vote, action, taxonomy=fingerprint) else "unchanged"
+        if action.name == "quarantine":
+            dest = quarantine(item.path, root, reason=action.reason, triggers=action.triggers)
+            applied = f"quarantine:{dest.relative_to(root).as_posix()}"
+        return applied
+
     def work(item: Prepared) -> tuple[Prepared, Vote | None, Action | None, str | None, BaseException | None, float]:
+        """The worker: the request and the decision, and nothing on disk (see apply_item)."""
         started = time.perf_counter()
         if state["stop"] and item.local is None:
             # A stop landed between this request leaving the queue and reaching the API.
@@ -413,19 +441,7 @@ def run_prepared(
             else:
                 vote = engine.vote(item.state, questions)
                 action = call_decide(item, vote)
-            applied = None
-            if apply and not state["stop"]:
-                # A stop landed while this request was in flight: the vote was billed, but no
-                # file changes without a row, and after an interrupt inside the writer there is
-                # no row. --resume judges (or, from a row, applies) it again.
-                if item.frontmatter_error:
-                    applied = "unchanged: frontmatter unreadable"  # a header we cannot read is one we must not rewrite
-                else:
-                    applied = "frontmatter" if stamp(item.path, vote, action, taxonomy=fingerprint) else "unchanged"
-                if action.name == "quarantine":
-                    dest = quarantine(item.path, root, reason=action.reason, triggers=action.triggers)
-                    applied = f"quarantine:{dest.relative_to(root).as_posix()}"
-            return item, vote, action, applied, None, started
+            return item, vote, action, None, None, started
         except Exception as exc:  # noqa: BLE001
             return item, None, None, None, exc, started
 
@@ -446,7 +462,7 @@ def run_prepared(
                 raise ScanAborted(OUT_OF_CREDITS, rows, reason="402")
             if state["sent"] >= ERROR_STOP_WINDOW and state["errors"] / state["sent"] > ERROR_STOP_RATIO:
                 state["stop"] = True
-                raise ScanAborted(f"stopping: {state['errors']} of the first {state['sent']} sent notes failed; that is the run, not the notes.", rows, reason="error-rate")
+                raise ScanAborted(f"stopping: {state['errors']} of the {state['sent']} notes sent so far failed; that is the run, not the notes.", rows, reason="error-rate")
             return
         assert vote is not None and action is not None
         if item.local is None and not state["drift_checked"] and cached_models:
@@ -455,6 +471,12 @@ def run_prepared(
                 state["cache_enabled"] = False
                 emit({"kind": "event", "event": "model_drift", "at": now(),
                       "detail": f"cached votes are from {sorted(cached_models)}, this run gets {vote.model!r}; cached votes are no longer served"})
+        if apply and not state["stop"]:
+            # The writer applies, then emits, in one step. A result drained after a stop keeps
+            # applied=None: the vote was billed and is recorded, and --resume applies it from
+            # the row. The residual is a Ctrl-C in the instant between this stamp and its row,
+            # in this one thread: at most one file, and the README says so.
+            applied = apply_item(item, vote, action)
         emit(_vote_row(item, vote, action, applied, fingerprint, started, payload=payload))
         if item.local is None and vote.input_tokens:
             state["tokens"] += vote.input_tokens
@@ -468,14 +490,7 @@ def run_prepared(
         if apply and row.get("applied") is None:
             # The cached run was a dry run; this one applies. Rebuild the vote from the row.
             vote = _vote_from_row(row)
-            action = call_decide(item, vote)
-            if item.frontmatter_error:
-                row["applied"] = "unchanged: frontmatter unreadable"
-            else:
-                row["applied"] = "frontmatter" if stamp(item.path, vote, action, taxonomy=fingerprint) else "unchanged"
-            if action.name == "quarantine":
-                dest = quarantine(item.path, root, reason=action.reason, triggers=action.triggers)
-                row["applied"] = f"quarantine:{dest.relative_to(root).as_posix()}"
+            row["applied"] = apply_item(item, vote, call_decide(item, vote))
         emit(row)
 
     def serve(item: Prepared) -> None:
@@ -559,8 +574,9 @@ def run_prepared(
             finish_done()
     except (ScanAborted, KeyboardInterrupt) as exc:
         # A stop or Ctrl-C: nothing queued goes out; what had already left for the API completes
-        # and is recorded (it was sent and billed, and under --apply its file was written), then
-        # the exception is re-raised with every row and, for a stop, the count.
+        # and is recorded (it was sent and billed; under --apply nothing was written, because
+        # only the writer writes, and it writes after a stop only from a row), then the
+        # exception is re-raised with every row and, for a stop, the count.
         state["stop"] = True
         for f in pending:
             f.cancel()
@@ -609,8 +625,9 @@ def scan_vault(
     """Scan a vault or one note. Returns one row per note; calls ``on_row`` as each row is final.
 
     Convenience wrapper over prepare_vault + run_prepared. A note whose vote fails yields an
-    ``error`` row and the scan continues; if more than ERROR_STOP_RATIO of the first
-    ERROR_STOP_WINDOW sent notes fail, ScanAborted is raised carrying the rows so far.
+    ``error`` row and the scan continues; once ERROR_STOP_WINDOW notes have been sent, if more
+    than ERROR_STOP_RATIO of all the notes sent so far have failed (a running total, checked
+    after every send), ScanAborted is raised carrying the rows so far.
     """
     model_requested = "fixture" if offline else (model or "jev-latest")
     root, plan, items, fingerprint = prepare_vault(

@@ -6,10 +6,11 @@ In live mode this tool sends redacted note excerpts to TypeSafe's hosted Jev API
 ## Exactly what is sent, per note
 
 This list is the same as the README's "What leaves the machine" and is what `build_state`
-in `janitor/scan.py` assembles; nothing else is sent.
+in `janitor/scan.py` assembles as the note's state. Beside that state, every call carries the
+taxonomy's questions exactly as written (the `questions` argument of the client); nothing else is sent.
 
 - title, after local redaction
-- the frontmatter `aliases`, redacted exactly like the title (the one frontmatter value sent)
+- the frontmatter `aliases` (or the singular `alias`; both keys are read), redacted exactly like the title (the one frontmatter value sent)
 - vault-relative posix path, redacted like the title one segment at a time (never absolute,
   never the OS username; through 0.4.6 it left as written, so a denylisted name in a
   filename and a key in a folder name went out)
@@ -31,19 +32,19 @@ in `janitor/scan.py` assembles; nothing else is sent.
 ## What is never sent
 
 - bodies of notes on sensitive paths (`family`, `private`, `personal`, `secrets`, `inbox`
-  by default; override with `--sensitive-paths`)
+  by default; override with `--sensitive-paths`), unless you pass `--include-sensitive`
 - titles of notes on sensitive paths as sibling context for any other note, even when
   `--include-sensitive` scans their bodies (a note you opt in is judged by its own title)
-- absolute paths, frontmatter values other than `aliases`, anything past the excerpt cap
-- the bodies of the notes a note links to
+- absolute paths, frontmatter values other than `aliases` (or `alias`), anything past the excerpt cap
+- the bodies of the notes a note links to (a linked note's title leaves only as one of the redacted sibling titles of a note in the same folder)
 - the API key, other than in the SDK's request header
 
 ## Records (`jev-records`)
 
 For a JSONL record, only the values under `sent` leave, as
 `{"fields": {name: value}, "field_names": [...]}`: every string redacted then cut at the
-excerpt cap, every number redacted in its string form (a 16-digit Luhn-valid integer is a
-`[CARD]`), lists element by element. Field names are sent and must be identifiers that
+excerpt cap, every number redacted in its string form (a 16-digit integer that passes Luhn
+and starts with 2 to 6 is a `[CARD]`; one starting with 1 is sent as a number), lists element by element. Field names are sent and must be identifiers that
 neither the redactor nor the denylist would change, or the file is refused before any
 request (through 0.4.6 the names skipped the denylist). The `id` is never sent; it is on the row and in the
 journal raw, like the vault path. Nothing else on the line is read. A record with a
@@ -112,9 +113,13 @@ its frontmatter key names, its excerpt and the sibling titles alike:
   literal, not a user. A placeholder password is left alone
   and does not quarantine: `${VAR}` in any case, a bare `$VAR` or `%VAR%` only in upper case
   with digits and underscores (so `$Zq7vR2mW9x` is a password, and an all-caps password that
-  starts with `$` is the residual that reads as a placeholder), `{{ var }}`, `<password>`,
-  `[password]`, the words `password`, `passwd`, `pass`, `pwd`, `secret`, `changeme` and
-  `changeit` in any case, and a run of `x`, `*` or dots. This rule runs before every other. (Through 0.4.6 a
+  starts with `$` is the residual that reads as a placeholder), `{{ var }}` in any case, one
+  layer of `{…}`, `<…>` or `[…]` only when what is inside is itself a placeholder (an
+  UPPER_SNAKE name, a placeholder word alone or as a whole word, or a run of `x`, `*` or
+  dots; `<MyRealPassword>` is a password, and through 0.4.7 it was not; a bracketed password
+  whose user or host is itself a template, as in an f-string URL, reads as a template too), the words `password`,
+  `passwd`, `pass`, `pwd`, `secret`, `changeme` and `changeit` in any case, and a run of `x`,
+  `*` or dots. This rule runs before every other. (Through 0.4.6 a
   `localhost` or IP-address URL's password went out in the clear, and a dotted-host one was
   masked as `[EMAIL]` with the user still sent and no quarantine. Key-and-value forms such as
   `Password=…;` are not covered.)

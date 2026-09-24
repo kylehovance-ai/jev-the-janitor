@@ -85,7 +85,17 @@ FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "notes"
 # one 0.4.7's first cut would have wrongly quarantined; 13 already invalidates the 0.4.6 cache.
 # Re-pinned 2026-09-24 WITHOUT a bump (still 13): a comment in redact.py was reworded; no
 # pattern, code path or sent byte changed, and the redaction suite passes unchanged.
-RECORDED_STATE_SOURCES_DIGEST = "f4283f691300a0e1"
+# Re-pinned 2026-09-24 WITHOUT a bump (still 13), 0.4.8: a single-file scan now ranks its sibling
+# titles by overlap like a directory scan (only single-file states change, and their keys change
+# on their own); a bracketed value is a placeholder only when what is inside is one (a note
+# holding `{MyRealPassword}` in a URL now sends [URL_CREDENTIAL] and is quarantined; 0.4.7 sent
+# it); the error-rate abort string and the survey header changed (not sent). Measured: the
+# fixture vault's ten canonical states are byte-identical under the published 0.4.7 and this tree.
+# Re-pinned 2026-09-24 WITHOUT a bump (still 13), 0.4.8 second cut: under --apply the writer thread
+# stamps or quarantines right before it records the row (workers no longer touch disk), and a
+# bracketed URL password next to a templated user or host reads as a template. Nothing sent
+# changes for any note that 0.4.7 did not already leak.
+RECORDED_STATE_SOURCES_DIGEST = "13c51f5a6c3a9b8c"
 RECORDED_STATE_VERSION = 13
 
 
@@ -170,7 +180,7 @@ def test_error_rate_stop_after_window(tmp_path: Path):
     bad = {f"n{i}.md" for i in range(0, 60, 3)}  # every third note fails: 33% > 20%
     with pytest.raises(ScanAborted) as exc:
         scan_vault(vault, client=RaisesOn(bad), offline=True)
-    assert "of the first" in str(exc.value) and "failed" in str(exc.value)
+    assert "notes sent so far failed" in str(exc.value)  # a running total once the window is full, not "the first 50"
     assert len(exc.value.rows) >= 50  # rows so far are carried, not lost
 
 
