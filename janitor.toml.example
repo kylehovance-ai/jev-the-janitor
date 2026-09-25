@@ -34,7 +34,7 @@ journal = "default"
 # Ceiling, in dollars, for one live run's pessimistic cost estimate, computed from the actual
 # redacted payloads at the densest chars-per-token ever measured. A run whose estimate is
 # over it refuses with exit 1; --over-budget accepts the bill for one run. 0 means no ceiling.
-# For scale: a real 18,738-note pass at the default excerpt cap estimates $1.39 to $1.88 (a projection, as in the README).
+# For scale: the pre-flight for a real 18,738-note vault at the default excerpt cap prints $1.39 to $1.88 (the README projects about $1.49).
 max_usd = 2.00
 
 # Quarantine when safe_to_leave_in_git is at or below this. Off unless set: a threshold

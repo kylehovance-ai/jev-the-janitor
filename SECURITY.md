@@ -134,9 +134,11 @@ its frontmatter key names, its excerpt and the sibling titles alike:
   false-positive on ordinary prose). A denylist entry matches across any run of whitespace,
   a line break included, and since 0.5.5 across an underscore, a hyphen, a dot, a slash and an en or
   em dash (`Jane_Doe`, `jane-doe`, `Jane.Doe`, `Jane/Doe`, `Jane–Doe`), and in its own redacted form;
-  the residuals no rule tells from a word or a sentence are a name run together (`JaneDoe`), the
-  surname-first form with a comma (`Doe, Jane`) and emphasis inside the name (`**Jane** Doe`), which
-  need their own entries; entries under three characters are ignored and the CLI says so. A card after a leading count or year is still found. A number
+  exactly these may stand between the words: whitespace, `_`, `-`, `.`, `/`, an en dash and an em
+  dash. Forms it does not match include any other joiner (`Jane, Doe`, `Jane;Doe`, `Jane+Doe`,
+  `Jane|Doe`), the surname-first form (`Doe, Jane`), a middle initial (`Jane Q. Doe`), the name run
+  together (`JaneDoe`) and emphasis inside it (`**Jane** Doe`); add the forms your notes use as
+  their own entries. Entries under three characters are ignored and the CLI says so. A card after a leading count or year is still found. A number
   with a leading `+` and country code is a phone; `case`, `id` and `part` mark an identifier
   only with an explicit `#`, `no.` or `number` after them (through 0.4.6 each of these went
   out)

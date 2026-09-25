@@ -642,7 +642,7 @@ def test_a_denylisted_name_matches_across_hyphens_and_underscores_in_paths_and_w
     assert "[[[NAME]]] and [[[NAME]]]" in excerpt
     assert "JaneDoe" in excerpt  # the documented residual: no separator, no match
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert "run together with no separator" in readme
+    assert "the name run together (`JaneDoe`)" in readme  # 0.5.6: named among the forms it does not match
 
 
 def test_an_apply_run_does_not_invalidate_its_own_cache(tmp_path: Path, monkeypatch, capsys):
@@ -979,10 +979,17 @@ def test_the_docs_say_what_holds_after_the_051_audit():
     rows = json.loads((ROOT / "examples" / "demo-vault-run" / "run.json").read_text(encoding="utf-8"))
     D = R.diagnose(rows, sensitive_list=list(R.DEFAULT_SENSITIVE))
     two_bucket = sum(1 for r in D["pile"] if len(R.ordered_probs(r)) >= 2 and "needs_review" not in (R.ordered_probs(r)[0][0], R.ordered_probs(r)[1][0]))
-    abstaining = D["n_pile"] - two_bucket
-    assert (D["n_pile"], two_bucket, abstaining) == (27, 26, 1)
-    assert f"{D['n_pile']} notes (12%) went to the review pile, {two_bucket} of them a split between two buckets and one Jev abstaining into `needs_review`, led by `ephemeral` against `log_entry` (7 notes)" in readme
-    assert "every one of them a split" not in readme
+    other = D["n_pile"] - two_bucket
+    # 0.5.6: the 27th note VOTED durable_memory with needs_review as runner-up; through 0.5.5 the README and the
+    # card called it "Jev abstaining into needs_review", which describes a runner-up as a vote
+    assert (D["n_pile"], two_bucket, other) == (27, 26, 1)
+    assert (D["needs_review_explicit"], D["needs_review_runner_up"]) == (0, 1)
+    pairs = dict(D["tie_pairs"])
+    assert (pairs[("ephemeral", "log_entry")], pairs[("durable_memory", "project_decision")], pairs[("durable_memory", "ephemeral")]) == (7, 6, 5)
+    assert (f"{D['n_pile']} notes (12%) went to the review pile. In {two_bucket} of them neither of the top two buckets was `needs_review`; "
+            f"the commonest pairs were `ephemeral` against `log_entry` (7 notes), `durable_memory` against `project_decision` (6) and `durable_memory` against `ephemeral` (5). "
+            f"In the {D['n_pile']}th, `needs_review` was the runner-up, and no pile note voted `needs_review`.") in readme
+    assert "every one of them a split" not in readme and "abstaining" not in readme and "in the other `needs_review`" not in readme
     assert "the name in each of `jane-doe.md`, `Jane_Doe.md` and a `[[jane-doe]]` link becomes `[NAME]` (`[NAME].md`, `[NAME].md` and `[[[NAME]]]`" in readme  # C3
     assert "a note's first stamp added a key name and changed its cache key" in readme  # C4
     assert "every `--apply` run changed the cache key of every note it stamped" not in readme

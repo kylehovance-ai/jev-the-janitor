@@ -113,7 +113,10 @@ FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "notes"
 # `Authorization: Basic <base64>` credential is redacted as [BEARER] like Bearer (0.5.4 sent it as written). Both
 # change what leaves for such a note, so every key is re-made; the bump is free today because no one has re-pinned
 # to 0.5.4 yet, so the full re-scan happens once either way.
-RECORDED_STATE_SOURCES_DIGEST = "d2968865dad209e4"
+# Re-pinned 2026-09-25 WITHOUT a bump (still 15), 0.5.6: only a comment and the docstring in redact.py changed (the
+# joiner and every pattern are byte-identical to 0.5.5); the whole module's source is watched, so the digest moved
+# while nothing that leaves the machine did.
+RECORDED_STATE_SOURCES_DIGEST = "c34ab5423ecb2313"
 RECORDED_STATE_VERSION = 15
 
 

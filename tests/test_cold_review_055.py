@@ -127,13 +127,22 @@ def test_denylist_matches_across_dots_slashes_and_dashes_and_names_its_residuals
     for text in ("Mara.Quill", "Mara/Quill", "Mara–Quill", "Mara—Quill", "mara.quill", "Mara-Quill", "Mara_Quill", "Mara" + NL + "Quill"):
         assert redact(text, denylist=["Mara Quill"]).text == "[NAME]", text
     assert redact("see Mara.Quill's note and [[mara/quill]]", denylist=["Mara Quill"]).text == "see [NAME]'s note and [[[NAME]]]"
-    # the documented residuals: not matched, named in both docs
-    for text in ("MaraQuill", "Quill, Mara", "**Mara** Quill"):
+    # what it does not match (0.5.6: the docs say "include", because this list is not complete by construction):
+    # any other joiner, the surname-first form, a middle initial, the run-together name, emphasis inside it
+    for text in ("Mara, Quill", "Mara,Quill", "Mara;Quill", "Mara+Quill", "Mara|Quill", "Mara" + chr(92) + "Quill",
+                 "Mara Q. Quill", "MaraQuill", "Quill, Mara", "**Mara** Quill"):
         assert redact(text, denylist=["Mara Quill"]).text == text, text
+    # and what it does: a possessive, a double space and a line break keep matching
+    assert redact("Mara Quill's", denylist=["Mara Quill"]).text == "[NAME]'s"
+    assert redact("Mara  Quill", denylist=["Mara Quill"]).text == "[NAME]"
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     security = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
-    for doc in (readme, security):
-        assert "`JaneDoe`" in doc and "`Doe, Jane`" in doc and "`**Jane** Doe`" in doc
+    docstring = (ROOT / "janitor" / "redact.py").read_text(encoding="utf-8")
+    for doc in (readme, security, docstring):
+        assert "Forms it does not match include" in doc
+        for form in ("`Jane, Doe`", "`Jane;Doe`", "`Jane+Doe`", "`Jane|Doe`", "`Doe, Jane`", "`Jane Q. Doe`", "`JaneDoe`", "`**Jane** Doe`"):
+            assert form in doc, form
+        assert "the residuals" not in doc.split("Forms it does not match include")[1][:400]
     assert "is the residual no rule can tell from a word" not in readme
 
 
@@ -225,5 +234,8 @@ def test_the_toml_example_quotes_the_current_reference_estimate():
     bill.py say $1.39 to $1.88."""
     example = (ROOT / "janitor.toml.example").read_text(encoding="utf-8")
     assert "$1.39 to $1.88" in example and "$0.68" not in example
+    # 0.5.6: the range is what the pre-flight prints; the projection is the README's $1.49, and they are not the same figure
+    assert "the pre-flight for a real 18,738-note vault at the default excerpt cap prints $1.39 to $1.88 (the README projects about $1.49)" in example
+    assert "a projection, as in the README" not in example
     assert "$1.39 to $1.88" in (ROOT / "README.md").read_text(encoding="utf-8")
     assert "$1.39 to $1.88" in (ROOT / "janitor" / "bill.py").read_text(encoding="utf-8")

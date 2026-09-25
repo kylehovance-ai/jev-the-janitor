@@ -106,6 +106,11 @@ def flag_amount(x):
     return f"{x:.2f}"
 
 
+def n_notes(n):
+    """"1 note", "27 notes": the committed demo page once read "(1 notes)"."""
+    return f"{n:,} note" + ("" if n == 1 else "s")
+
+
 def pct(n, d):
     return (n / d * 100) if d else 0.0
 
@@ -673,9 +678,11 @@ def section_a(D):
         # 17 notes outranks a 7-note tie whose merge clears fewer.
         if D["tie_pairs"]:
             (a, b), n_top = D["tie_pairs"][0]
-            candidates.append((n_top, f"a tie between the categories `{a}` and `{b}` ({n_top} notes)"))
+            candidates.append((n_top, f"a tie between the categories `{a}` and `{b}` ({n_notes(n_top)})"))
         if D["needs_review_pull"]:
-            candidates.append((D["needs_review_pull"], f"Jev abstaining into `needs_review` ({D['needs_review_pull']} notes)"))
+            # explicit votes plus runner-ups: through 0.5.5 this read "Jev abstaining into needs_review",
+            # which called a runner-up a vote (the demo's one such note voted durable_memory)
+            candidates.append((D["needs_review_pull"], f"`needs_review` on top or as runner-up ({n_notes(D['needs_review_pull'])})"))
         if D["hot_folders"]:
             candidates.append((D["hot_folder_pile_notes"], f"{len(D['hot_folders'])} hot folder(s) ({D['hot_folder_pile_notes']} pile notes)"))
         if D["truncation_cause"]:
@@ -741,7 +748,7 @@ def section_b(D):
         can.append(f"<strong>Tie `{a}`–`{b}` ({w['tied']} notes):</strong> edit the two sentences in <code>janitor/taxonomies/vault_memory.yaml</code> so they say how they differ, or merge them. "
                    f"`{a}`:{quote(D, a)} `{b}`:{quote(D, b)} If Jev splits its vote the same way under the edited taxonomy, about <strong>{w['clears']} of {n}</strong> would clear (an estimate from this run's own probabilities, not a bound); only a rerun confirms it.")
     if D["needs_review_pull"]:
-        can.append(f"<strong>Jev abstaining into `needs_review` ({D['needs_review_pull']} notes):</strong> `needs_review` is not a category, it is Jev declining to choose, so a split with it is not two overlapping sentences. Reword the sentence so it is a last resort, not a peer of the other buckets. Today it reads:{quote(D, 'needs_review')}")
+        can.append(f"<strong>`needs_review` on top or as runner-up ({n_notes(D['needs_review_pull'])}, {D['needs_review_explicit']} voted it outright):</strong> `needs_review` is not a category, it is Jev declining to choose, so a split with it is not two overlapping sentences. Reword the sentence so it is a last resort, not a peer of the other buckets. Today it reads:{quote(D, 'needs_review')}")
     if D["merge_whatif"] or D["needs_review_pull"]:
         can.append(f"<strong>The cost of any taxonomy edit:</strong> {rerun}")
     for h in D["hot_folders"]:
@@ -750,7 +757,7 @@ def section_b(D):
         if c and c["kind"] == "tie":
             competes = f"What competes there: `{c['pair'][0]}` against `{c['pair'][1]}` in {c['n']} of its {h['pile']} pile notes."
         elif c:
-            competes = f"What competes there: Jev abstaining into `needs_review` in {c['n']} of its {h['pile']} pile notes."
+            competes = f"What competes there: `needs_review` on top or as runner-up in {c['n']} of its {h['pile']} pile notes."
         else:
             competes = "No single pair competes there."
         if ex["safe"]:
@@ -826,7 +833,7 @@ def section_c(D):
         for b in D["unused_buckets"]:
             k = D["unused_runner_up"].get(b, 0)
             if b == "needs_review":
-                can.append(f"`needs_review` unused means Jev never abstained outright; that is fine, not a wording problem ({k} pile notes had it as runner-up).")
+                can.append(f"`needs_review` unused means no note's top vote was `needs_review`; that is fine, not a wording problem ({n_notes(k)} in the pile had it as runner-up).")
             elif k:
                 can.append(f"`{b}` was the runner-up in {k} pile notes: close but losing, so its sentence is a wording problem. Sharpen it against the buckets those notes landed in.")
             else:

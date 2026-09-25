@@ -367,9 +367,9 @@ MIN_DENYLIST_CHARS = 3
 _TOKEN = re.compile(r"\[[A-Z_]+\]")
 
 
-# What may stand between the words of a denylisted name: whitespace (a line break included),
-# underscore, hyphen, dot, slash, en dash, em dash. Not a comma: `Doe, Jane` is surname-first,
-# a different form, and is a documented residual.
+# Exactly what may stand between the words of a denylisted name: whitespace (a line break
+# included), underscore, hyphen, dot, slash, en dash, em dash. Any other joiner (a comma, a
+# semicolon, a plus, a pipe, a backslash) is not matched; the docs say so with "include".
 DENYLIST_JOINER = "[\\s_\\-./–—]+"
 
 
@@ -385,10 +385,11 @@ def denylist_patterns(name: str) -> tuple[re.Pattern[str], ...]:
     `Jane_Doe.md` or `[[jane-doe]]`, because that is how the name reaches a filename and a
     wikilink (through 0.4.10 those left as written while the title read [NAME]); and since
     0.5.5 across a dot, a slash or an en or em dash (`Jane.Doe`, `Jane/Doe`, `Jane–Doe`), which
-    through 0.5.4 left as written. The residuals, which no rule tells from a word or a
-    sentence: a name run together with no separator (`JaneDoe`), the surname-first form with
-    a comma (`Doe, Jane`), and emphasis inside the name (`**Jane** Doe`); add those as their
-    own entries if they occur. An entry that itself holds
+    through 0.5.4 left as written. Exactly those joiners (DENYLIST_JOINER) and nothing else.
+    Forms it does not match include any other joiner (`Jane, Doe`, `Jane;Doe`, `Jane+Doe`,
+    `Jane|Doe`), the surname-first form (`Doe, Jane`), a middle initial (`Jane Q. Doe`), the
+    name run together (`JaneDoe`) and emphasis inside it (`**Jane** Doe`); the owner adds the
+    forms their notes use as their own entries. An entry that itself holds
     something the patterns rewrite (`Jane Doe <jane@example.com>`) is also matched in its
     own redacted form (`Jane Doe <[EMAIL]>`), because the patterns run first and would
     otherwise leave `Jane Doe <` behind; a form that is nothing but tokens is not used.

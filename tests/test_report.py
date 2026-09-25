@@ -121,7 +121,10 @@ def test_merge_and_differ_advice_never_sits_next_to_needs_review(page):
             assert "merg" not in li.lower() or "not two overlapping sentences" in li, li[:200]
             assert "say how they differ" not in li, li[:200]
     summary = re.search(r"<section id='summary'>(.*?)</section>", page, re.S).group(1)
-    assert "abstaining" in summary or "needs_review" not in summary
+    # the label counts explicit votes plus runner-ups and says so; through 0.5.5 it read "Jev abstaining
+    # into needs_review", which called a runner-up a vote
+    assert "on top or as runner-up" in summary or "needs_review" not in summary
+    assert "abstaining" not in page and "abstained" not in page
 
 
 # --- item 2: the what-if is an estimate under a stated assumption, not a bound ----------------
