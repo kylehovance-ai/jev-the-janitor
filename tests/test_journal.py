@@ -108,8 +108,13 @@ FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "notes"
 # same state: a 0.5.1 stamp has no recorded date, so the mtime path is used as 0.5.1 used it; a note stamped
 # by 0.5.2 keeps sending the band 0.5.1 sent before the stamp, which is the point. No key that 0.5.1 would
 # serve changes, so a bump would only re-bill every vault for nothing.
-RECORDED_STATE_SOURCES_DIGEST = "5c4bf2bfd545f992"
-RECORDED_STATE_VERSION = 14
+# Re-pinned 2026-09-25 WITH a bump to 15 (0.5.5): a denylisted name also matches across dots, slashes and en/em
+# dashes (0.5.4 sent `Jane.Doe`, `Jane/Doe`, `Jane–Doe` as written under a denylist holding `Jane Doe`), and an
+# `Authorization: Basic <base64>` credential is redacted as [BEARER] like Bearer (0.5.4 sent it as written). Both
+# change what leaves for such a note, so every key is re-made; the bump is free today because no one has re-pinned
+# to 0.5.4 yet, so the full re-scan happens once either way.
+RECORDED_STATE_SOURCES_DIGEST = "d2968865dad209e4"
+RECORDED_STATE_VERSION = 15
 
 
 def test_state_version_is_bumped_when_state_sources_change():

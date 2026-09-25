@@ -123,7 +123,7 @@ its frontmatter key names, its excerpt and the sibling titles alike:
   `localhost` or IP-address URL's password went out in the clear, and a dotted-host one was
   masked as `[EMAIL]` with the user still sent and no quarantine. Key-and-value forms such as
   `Password=…;` are not covered.)
-- bearer tokens, JWTs, PEM and PGP private-key blocks, AWS secrets (`[BEARER]`, `[JWT]`,
+- bearer tokens and `Authorization: Basic` credentials (both `[BEARER]`, both quarantine; Basic since 0.5.5), JWTs, PEM and PGP private-key blocks, AWS secrets (`[BEARER]`, `[JWT]`,
   `[PEM]`, `[AWS_SECRET]`; these quarantine too). A block without its END line runs to the
   first blank line or the end of the text (through 0.4.6 a PGP block and an unterminated
   block went out whole); an AWS secret is taken with any spacing around the `=` or `:`
@@ -132,8 +132,11 @@ its frontmatter key names, its excerpt and the sibling titles alike:
 - emails, phone numbers, card numbers, SSNs and denylisted names (`[EMAIL]`, `[PHONE]`,
   `[CARD]`, `[SSN]`, `[NAME]`; these redact but do not quarantine, because they
   false-positive on ordinary prose). A denylist entry matches across any run of whitespace,
-  a line break included, and in its own redacted form; entries under three characters are
-  ignored and the CLI says so. A card after a leading count or year is still found. A number
+  a line break included, and since 0.5.5 across an underscore, a hyphen, a dot, a slash and an en or
+  em dash (`Jane_Doe`, `jane-doe`, `Jane.Doe`, `Jane/Doe`, `Jane–Doe`), and in its own redacted form;
+  the residuals no rule tells from a word or a sentence are a name run together (`JaneDoe`), the
+  surname-first form with a comma (`Doe, Jane`) and emphasis inside the name (`**Jane** Doe`), which
+  need their own entries; entries under three characters are ignored and the CLI says so. A card after a leading count or year is still found. A number
   with a leading `+` and country code is a phone; `case`, `id` and `part` mark an identifier
   only with an explicit `#`, `no.` or `number` after them (through 0.4.6 each of these went
   out)

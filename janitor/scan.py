@@ -335,8 +335,11 @@ def _vote_row(item: Prepared, vote: Vote, action: Action, applied: str | None, f
         # The exact object that left the machine. Operator-facing only: SECURITY.md tells
         # people to read the excerpt, and until now the report had no excerpt to read.
         # Never journaled -- the journal lives outside the vault, and redacted vault text
-        # does not belong outside the vault permanently.
-        row["sent"] = item.state
+        # does not belong outside the vault permanently. A note decided locally (empty, an
+        # exact duplicate, a local redaction hit) is never sent, so its row says `sent: null`;
+        # through 0.5.4 it carried the state it would have sent, which the flag's own promise,
+        # "exactly what leaves your machine", did not cover.
+        row["sent"] = item.state if item.local is None else None
     return row
 
 
@@ -489,12 +492,21 @@ def run_prepared(
                 raise ScanAborted(f"stopping: {state['errors']} of the {state['sent']} notes sent so far failed; that is the run, not the notes.", rows, reason="error-rate")
             return
         assert vote is not None and action is not None
+        drift: str | None = None
         if item.local is None and not state["drift_checked"] and cached_models:
             state["drift_checked"] = True
             if vote.model not in cached_models and not trust_cache_across_models:
+                # The pre-flight counted every cached note as served. Through 0.5.4 this
+                # switched the cache off and the loop then SENT every cached note it had not
+                # served yet, bounded only by the spend ceiling: the run sent notes the
+                # pre-flight never counted and the owner never consented to. Now it stops.
                 state["cache_enabled"] = False
+                drift = (f"stopping: the journal's cached votes are from {sorted(cached_models)} and this run's model is {vote.model!r}. "
+                         f"The pre-flight counted the cached notes as served, so they are not sent under the new model without a new estimate: "
+                         f"re-run with --no-cache to judge every note under the new model (a new bill, a new consent), "
+                         f"or with --trust-cache-across-models to keep serving the cached votes.")
                 emit({"kind": "event", "event": "model_drift", "at": now(),
-                      "detail": f"cached votes are from {sorted(cached_models)}, this run gets {vote.model!r}; cached votes are no longer served"})
+                      "detail": f"cached votes are from {sorted(cached_models)}, this run gets {vote.model!r}; the run stops after the notes already in flight"})
         if apply and not state["stop"]:
             # The writer applies, then emits, in one step. A result drained after a stop keeps
             # applied=None: the vote was billed and is recorded, and --resume applies it from
@@ -519,6 +531,11 @@ def run_prepared(
             state["chars"] += len(canonical(item.state)) + question_chars  # the basis the range is defined on
             state["metered"] += 1
             meter_check(state, spend_limit, rows, "notes")
+        if drift is not None:
+            # This vote was sent, billed and is recorded above; nothing queued goes out, and
+            # what is already in flight drains and is recorded like any other stop.
+            state["stop"] = True
+            raise ScanAborted(drift, rows, reason="model-drift")
 
     def serve_cached(item: Prepared) -> None:
         row = dict(item.cached_row or {})

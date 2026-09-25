@@ -972,7 +972,17 @@ def test_the_docs_say_what_holds_after_the_051_audit():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     security = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
     assert "second brain of 250 notes, 251 files with the vault's own README" in readme  # C1: 250 notes, 251 scanned
-    assert "every one of them a split between two buckets, led by `ephemeral` against `log_entry` (7 notes)" in readme  # C2
+    # C2, counted through report.diagnose on the committed run rather than pinned as a string: the
+    # 0.5.4 wording said "every one of them", and by the report's own rule one pile note is Jev
+    # abstaining into needs_review, not a two-bucket split.
+    from janitor import report as R
+    rows = json.loads((ROOT / "examples" / "demo-vault-run" / "run.json").read_text(encoding="utf-8"))
+    D = R.diagnose(rows, sensitive_list=list(R.DEFAULT_SENSITIVE))
+    two_bucket = sum(1 for r in D["pile"] if len(R.ordered_probs(r)) >= 2 and "needs_review" not in (R.ordered_probs(r)[0][0], R.ordered_probs(r)[1][0]))
+    abstaining = D["n_pile"] - two_bucket
+    assert (D["n_pile"], two_bucket, abstaining) == (27, 26, 1)
+    assert f"{D['n_pile']} notes (12%) went to the review pile, {two_bucket} of them a split between two buckets and one Jev abstaining into `needs_review`, led by `ephemeral` against `log_entry` (7 notes)" in readme
+    assert "every one of them a split" not in readme
     assert "the name in each of `jane-doe.md`, `Jane_Doe.md` and a `[[jane-doe]]` link becomes `[NAME]` (`[NAME].md`, `[NAME].md` and `[[[NAME]]]`" in readme  # C3
     assert "a note's first stamp added a key name and changed its cache key" in readme  # C4
     assert "every `--apply` run changed the cache key of every note it stamped" not in readme

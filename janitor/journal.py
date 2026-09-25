@@ -24,7 +24,7 @@ SCHEMA = 1
 # instruction strings in schema.py, the excerpt cap. A cached vote from another state
 # version is not the same measurement. test_journal pins the digest below so the bump is
 # a deliberate act, not something that is forgotten.
-STATE_VERSION = 14  # 14: 0.5.0: the tool's own `janitor` key is not sent as a frontmatter key name, and a denylisted name matches across hyphens and underscores in paths and wikilinks (0.4.10 sent both)
+STATE_VERSION = 15  # 15: 0.5.5: a denylisted name also matches across dots, slashes and en/em dashes, and an `Authorization: Basic` credential is redacted like Bearer (0.5.4 sent both as written). 14: 0.5.0: the tool's own `janitor` key is not sent as a frontmatter key name, and a denylisted name matches across hyphens and underscores in paths and wikilinks
 # 13: 0.4.7: a password inside a URL is redacted; so are the path and the frontmatter key names; sibling titles are cut after redaction; ASIA ids, PGP and unterminated key blocks, keys after JSON escapes, padded AWS secrets, cards after a leading digit group, denylist entries across whitespace, and more phone shapes are caught. 0.4.6 sent every one of these.
 # 12: Telegram tokens redacted after a bare colon and inside Bot API URLs (0.4.1 sent them)
 # 11: 16 more credential formats redacted (Telegram, Stripe, GitHub gho_/ghu_/ghs_/ghr_, GOCSPX-, Slack/Discord webhooks, xapp-, SendGrid, npm, GitLab, Hugging Face), and the key line is case-sensitive

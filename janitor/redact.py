@@ -187,6 +187,15 @@ PATTERNS: list[tuple[str, re.Pattern[str]]] = [
         r"(?:[\s\S]*?-----END [A-Z ]*PRIVATE KEY(?: BLOCK)?-----|[^\r\n]*(?:\r?\n[^\r\n]+)*)"
     )),
     ("BEARER", re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._\-]{12,}")),
+    # `Authorization: Basic <base64 of user:password>`: the same label and the same quarantine
+    # rule as Bearer (through 0.5.4 it left as written beside a redacted Bearer). In header
+    # context (`Authorization`, an optional quote, `:` or `=`, an optional quote) any base64 run
+    # of eight or more is a credential, `dXNlcjpwYXNz` ("user:pass", all letters, no padding)
+    # included; the header prefix is kept (REPLACEMENTS). Bare, "Basic" is an ordinary word, so
+    # the token must carry a digit or a base64 symbol: "Basic understanding" is prose,
+    # "Basic dXNlcjpzM2NyZXRQYXNz" is a credential.
+    ("BEARER", re.compile(r"(?i)(?:(?P<hdr>\bAuthorization\s*[\"']?\s*[:=]\s*[\"']?\s*)Basic\s+[A-Za-z0-9+/]{8,}={0,2}(?![A-Za-z0-9+/=])"
+                          r"|\bBasic\s+(?=[A-Za-z0-9+/]*[0-9+/=])[A-Za-z0-9+/=]{12,}(?![A-Za-z0-9+/=]))")),
     # Quotes around the secret are optional; 0.1.0 required them and missed `key = value` lines.
     # Any run of spaces around the `=` or `:` is allowed; through 0.4.6 the gap between the
     # keyword and the value was eight characters at most, so `aws_secret_access_key   =   ...`
@@ -288,7 +297,11 @@ VALIDATORS = {"CARD": card_shape_ok, "PHONE": phone_context_ok, "URL_CREDENTIAL"
 # keeps its scheme and host around the token, so `postgres://[URL_CREDENTIAL]@localhost/db`
 # still reads as a local postgres URL. The `@` stays: the token's `]` is not an email
 # character, so EMAIL cannot re-take `[URL_CREDENTIAL]@db.example.com`.
-REPLACEMENTS = {"URL_CREDENTIAL": lambda m: f"{m.group(1)}[URL_CREDENTIAL]@{m.group(4)}"}
+REPLACEMENTS = {
+    "URL_CREDENTIAL": lambda m: f"{m.group(1)}[URL_CREDENTIAL]@{m.group(4)}",
+    # the Basic pattern's header prefix (`Authorization: `) stays; the Bearer pattern has no such group
+    "BEARER": lambda m: (m.groupdict().get("hdr") or "") + "[BEARER]",
+}
 
 
 def _sub_with_retry(pat: re.Pattern[str], text: str, replace: Callable[[re.Match[str]], str | None]) -> str:
@@ -354,6 +367,12 @@ MIN_DENYLIST_CHARS = 3
 _TOKEN = re.compile(r"\[[A-Z_]+\]")
 
 
+# What may stand between the words of a denylisted name: whitespace (a line break included),
+# underscore, hyphen, dot, slash, en dash, em dash. Not a comma: `Doe, Jane` is surname-first,
+# a different form, and is a documented residual.
+DENYLIST_JOINER = "[\\s_\\-./–—]+"
+
+
 @functools.lru_cache(maxsize=4096)
 def denylist_patterns(name: str) -> tuple[re.Pattern[str], ...]:
     """The compiled patterns for one denylist entry, cached: redact() runs once per sent string.
@@ -364,9 +383,12 @@ def denylist_patterns(name: str) -> tuple[re.Pattern[str], ...]:
     because hard-wrapped markdown puts "Jane" at the end of one line and "Doe" at the start
     of the next (through 0.4.6 only the exact spacing matched), and `jane-doe.md`,
     `Jane_Doe.md` or `[[jane-doe]]`, because that is how the name reaches a filename and a
-    wikilink (through 0.4.10 those left as written while the title read [NAME]). The
-    residual is a name run together with no separator, `JaneDoe`: no rule tells it from a
-    word, so it is not matched; add it to the denylist as its own entry if it occurs. An entry that itself holds
+    wikilink (through 0.4.10 those left as written while the title read [NAME]); and since
+    0.5.5 across a dot, a slash or an en or em dash (`Jane.Doe`, `Jane/Doe`, `Jane–Doe`), which
+    through 0.5.4 left as written. The residuals, which no rule tells from a word or a
+    sentence: a name run together with no separator (`JaneDoe`), the surname-first form with
+    a comma (`Doe, Jane`), and emphasis inside the name (`**Jane** Doe`); add those as their
+    own entries if they occur. An entry that itself holds
     something the patterns rewrite (`Jane Doe <jane@example.com>`) is also matched in its
     own redacted form (`Jane Doe <[EMAIL]>`), because the patterns run first and would
     otherwise leave `Jane Doe <` behind; a form that is nothing but tokens is not used.
@@ -379,7 +401,7 @@ def denylist_patterns(name: str) -> tuple[re.Pattern[str], ...]:
     if redacted != name and len(_TOKEN.sub("", redacted).strip()) >= MIN_DENYLIST_CHARS:
         forms.append(redacted)
     return tuple(
-        re.compile(r"(?<![A-Za-z0-9])" + r"[\s_\-]+".join(re.escape(w) for w in form.split()) + r"(?![A-Za-z0-9])", re.IGNORECASE)
+        re.compile(r"(?<![A-Za-z0-9])" + DENYLIST_JOINER.join(re.escape(w) for w in form.split()) + r"(?![A-Za-z0-9])", re.IGNORECASE)
         for form in forms
     )
 

@@ -135,7 +135,7 @@ def load_resume(journal: Path, today: dict[str, Any]) -> ResumePlan:
 
 
 REASONS = {"interrupted": "interrupted", "meter": "stopped by the meter", "402": "stopped by a 402", "error-rate": "stopped by the error rate",
-           "stop": "stopped"}
+           "model-drift": "stopped because the API's model changed", "stop": "stopped"}
 
 
 def describe_state(plan: ResumePlan) -> str:

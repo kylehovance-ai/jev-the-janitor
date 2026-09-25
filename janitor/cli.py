@@ -345,6 +345,16 @@ def apply_profile(args: argparse.Namespace, profile: Profile) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # A stock Windows console redirected to a file writes cp1252; a vault-relative path with a
+    # character outside it (a non-Latin filename) then raised UnicodeEncodeError from the
+    # first print, after the journal was written, and the run exited 1 (through 0.5.4). An
+    # unencodable character is now written as its escape; nothing is dropped and nothing stops.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(errors="backslashreplace")
+            except (ValueError, OSError):
+                pass  # a closed or replaced stream (a test harness): leave it
     args = parse_args(argv)
     target = args.path.expanduser().resolve()
     if not target.exists():
@@ -376,6 +386,16 @@ def main(argv: list[str] | None = None) -> int:
         if jpath is None or not jpath.exists():
             raise SystemExit(f"no journal to resume under {directory}")
         resume = load_resume(jpath, today)
+        if resume.reason == "model-drift" and not args.no_cache and not args.trust_cache_across_models:
+            # The stop persists. The stopped run's journal holds a vote from the new model, so a
+            # plain --resume would find both models in the chain, never see the change again, and
+            # serve every old-model vote as if --trust-cache-across-models had been given (the
+            # 0.5.5 first cut did exactly that). The choice is the owner's, so the run refuses
+            # before the consent question with the same two ways on.
+            print(f"the run being resumed ({resume.journal.name}) stopped because the API's model changed and the journal's cached votes "
+                  f"are from the earlier model. Choose: --no-cache judges every note under the new model (a new bill, a new consent), "
+                  f"or --trust-cache-across-models keeps serving the cached votes. Nothing was sent. Exit {EXIT_REFUSED}.", file=sys.stderr)
+            return EXIT_REFUSED
 
     cache = None if (resume is None or args.no_cache) else resume.cached
     index = build_index(target, include_sensitive=args.include_sensitive, sensitive_parts=sensitive_parts)

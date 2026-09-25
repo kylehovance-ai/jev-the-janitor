@@ -158,14 +158,21 @@ def test_model_drift_stops_serving_cache(tmp_path: Path):
             v.model = "fixture-2"
             return v
 
-    # n0 cached, n1 fresh (edited): the fresh vote reveals a new model; n2, n3 must then be re-voted, not served.
+    # n0 cached, n1 fresh (edited): the fresh vote reveals a new model. Through 0.5.4 n2 and n3
+    # were then SENT under the new model although the pre-flight had counted them as served;
+    # since 0.5.5 the run stops instead, and says both ways on.
+    from janitor.scan import ScanAborted
     (vault / "n1.md").write_text("# Note 1\n\nedited\n", encoding="utf-8")
-    rows = scan_vault(vault, client=NewModel(), offline=True, cache=cache)
+    with pytest.raises(ScanAborted) as info:
+        scan_vault(vault, client=NewModel(), offline=True, cache=cache)
+    rows = info.value.rows
+    assert info.value.reason == "model-drift"
+    assert "--no-cache" in str(info.value) and "--trust-cache-across-models" in str(info.value)
     by = {r.get("path"): r for r in rows if r.get("kind") == "vote"}
     events = [r for r in rows if r.get("kind") == "event"]
-    assert by["n0.md"]["cached"] is True
-    assert by["n1.md"]["cached"] is False
-    assert by["n2.md"]["cached"] is False and by["n3.md"]["cached"] is False
+    assert by["n0.md"]["cached"] is True  # served before the change was known, as the pre-flight counted
+    assert by["n1.md"]["cached"] is False  # the one fresh vote, which revealed the new model
+    assert "n2.md" not in by and "n3.md" not in by  # not sent, not served: the run stopped
     assert events and events[0]["event"] == "model_drift"
     rows2 = scan_vault(vault, client=NewModel(), offline=True, cache=cache, trust_cache_across_models=True)
     assert {r["path"]: r["cached"] for r in rows2 if r.get("kind") == "vote"}["n2.md"] is True
