@@ -50,7 +50,7 @@ def build_map(index: VaultIndex, rows: list[dict[str, Any]], *, taxonomy: str = 
 
     totals: dict[str, Any] = {
         "notes": 0, "judged": 0, "local": 0, "jev": 0, "cached": 0, "review": 0, "quarantined": 0, "locked": 0,
-        "skipped": Counter(), "findings": Counter(), "errors": 0, "age_from_mtime": 0, "dated": 0,
+        "skipped": Counter(), "findings": Counter(), "errors": 0, "age_from_mtime": 0, "dated": 0, "stamp_dated": 0,
     }
     buckets: Counter = Counter()
     duplicates: dict[str, list[str]] = defaultdict(list)
@@ -128,6 +128,8 @@ def build_map(index: VaultIndex, rows: list[dict[str, Any]], *, taxonomy: str = 
                 totals["age_from_mtime"] += 1
             elif note["age_source"] == "frontmatter":
                 totals["dated"] += 1
+            elif note["age_source"] == "stamp":
+                totals["stamp_dated"] += 1  # the date the janitor's stamp recorded (0.5.2): dated, and it does not reset
         if kind == "error":
             totals["errors"] += 1
         if note["locked"]:

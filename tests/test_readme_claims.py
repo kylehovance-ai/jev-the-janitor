@@ -582,13 +582,16 @@ def test_a_dated_note_does_not_get_younger_when_edited_or_cloned(tmp_path: Path)
 
 def test_age_bands_include_the_thousand_day_edge(tmp_path: Path):
     """README:85 clause: "the day a note crosses a band edge … 1, 7, 30, 90, 365 or 1000 days old"."""
-    from datetime import date, timedelta
+    from datetime import datetime, timedelta, timezone
 
     from janitor.index import AGE_BANDS, build_index
 
     assert AGE_BANDS == (0, 1, 7, 30, 90, 365, 1000)
+    # the janitor ages notes by the UTC date; date.today() is the local one and was a day behind
+    # for a few hours every evening west of Greenwich, which read a 0-day note as 1 day old
+    today = datetime.now(timezone.utc).date()
     for days, band in ((0, 0), (1, 1), (6, 1), (7, 7), (999, 365), (1000, 1000), (5000, 1000)):
-        d = (date.today() - timedelta(days=days)).isoformat()
+        d = (today - timedelta(days=days)).isoformat()
         (tmp_path / f"n{days}.md").write_text(f"---\ncreated: {d}\n---\n# N\n\nbody {days}\n", encoding="utf-8")
     index = build_index(tmp_path)
     for days, band in ((0, 0), (1, 1), (6, 1), (7, 7), (999, 365), (1000, 1000), (5000, 1000)):
@@ -977,3 +980,9 @@ def test_the_docs_say_what_holds_after_the_051_audit():
     assert "the manifest either way" in security  # C5
     # the "unrelated folder" examples are fictional ones, in both files
     assert "`Recipes/` or `garden/beds/` get no warning" in readme and "(`Recipes/`, `garden/beds/`)" in security
+    # 0.5.3: the third age source is stated wherever the other two are
+    assert "until its first `--apply` stamp: the stamp records that date once as `janitor.created_from_mtime`" in readme
+    assert "`age_source: frontmatter`, `stamp` (the date the janitor recorded at the note's first stamp, which does not reset) or `mtime`" in readme
+    assert "the pre-flight and the run's closing lines count the `mtime` ones against all three" in readme
+    assert "`age_source: frontmatter` or `mtime`" not in readme
+    assert "and a second one when it is used" in readme and "the footer then names that figure as the second not from the rows" in readme

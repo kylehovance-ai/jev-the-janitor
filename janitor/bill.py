@@ -111,6 +111,7 @@ class Bill:
     unreadable_headers: int = 0  # finding: frontmatter that no YAML reader can parse; judged on the body
     age_from_mtime: int = 0  # finding: no creation date in the frontmatter; the age would reset on a clone
     dated: int = 0  # notes whose age came from a frontmatter creation stamp
+    stamp_dated: int = 0  # notes whose age came from the date the janitor's stamp recorded (0.5.2); it does not reset
     skipped: Counter = field(default_factory=Counter)  # rule -> notes
     payload_chars: int = 0  # canonical JSON of every state that would be sent
     question_chars: int = 0  # the taxonomy text rides along with every call
@@ -160,6 +161,8 @@ def build_bill(plan: list[PlanEntry], items: list[Prepared], *, question_chars: 
             bill.age_from_mtime += 1
         elif item.age_source == "frontmatter":
             bill.dated += 1
+        elif item.age_source == "stamp":
+            bill.stamp_dated += 1  # through 0.5.2 this fell into neither count and the denominator undercounted
         if item.undecodable is not None:
             bill.undecodable += 1
         elif item.error is not None:
@@ -195,10 +198,12 @@ def render_bill(bill: Bill, *, live: bool) -> str:
         lines.append(f"    findings so far: {bill.unreadable_headers:,} note(s) with frontmatter no YAML reader can parse (judged on the body, never restamped), "
                      f"{bill.undecodable:,} not valid UTF-8 (never sent)")
     if bill.age_from_mtime:
-        total = bill.age_from_mtime + bill.dated
+        total = bill.age_from_mtime + bill.dated + bill.stamp_dated
         pct = 100 * bill.age_from_mtime / total if total else 0
         lines.append(f"    age: {bill.age_from_mtime:,} of {total:,} readable notes ({pct:.0f}%) have no creation date in their frontmatter; "
-                     f"their age comes from the filesystem and resets if this vault is moved, cloned, restored or re-synced")
+                     f"their age comes from the filesystem and resets if this vault is moved, cloned, restored or re-synced"
+                     + (f" ({bill.stamp_dated:,} other undated note(s) carry the date the janitor recorded at their first stamp, which does not reset)"
+                        if bill.stamp_dated else ""))
     if bill.max_usd is not None:
         state = "OVER" if bill.over_budget else "under"
         lines.append(f"    ceiling {usd(bill.max_usd)}: {state} at the pessimistic end (change it with --max-usd or max_usd in janitor.toml; 0 = none)")

@@ -849,6 +849,28 @@ def test_the_dominant_bucket_sentence_attributes_the_reading_to_jev(D, page):
     assert "this vault is mostly" not in summary
 
 
+def test_the_footer_names_every_figure_not_from_the_rows():
+    """0.5.3. The footer said the noise floor was the one quoted figure, on a page whose 2,086
+    question characters were the default taxonomy's size (the fallback for rows that predate the
+    field). The fallback is named as a second figure exactly when it is used."""
+    rows = [vote(f"n{i}.md", "durable_memory", {"durable_memory": 0.9}, tokens=1000, chars=3000) for i in range(5)]
+    for r in rows:
+        r["question_chars"] = 700
+    D = R.diagnose(rows)
+    assert D["question_chars_source"] == "recorded on each row"
+    assert R.quoted_figures(D).startswith("the one quoted figure is the noise floor") and "question characters" not in R.quoted_figures(D)
+    for r in rows:
+        del r["question_chars"]
+    D = R.diagnose(rows)
+    assert D["question_chars_source"] == R.FALLBACK_SOURCE
+    text = R.quoted_figures(D)
+    assert text.startswith("two quoted figures are not from these rows: the noise floor") and "2,086 question characters per call" in text
+    assert "predate the recorded field" in text
+    demo = (RUN_DIR / "report.html").read_text(encoding="utf-8")
+    assert "two quoted figures are not from these rows" in demo and "2,086 question characters per call" in demo
+    assert "the one quoted figure" not in demo
+
+
 def test_the_committed_demo_page_carries_the_052_fixes():
     page = (RUN_DIR / "report.html").read_text(encoding="utf-8")
     assert "most of this vault reads to Jev as `log_entry`" in page and "this vault is mostly" not in page

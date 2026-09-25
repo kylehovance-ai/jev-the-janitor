@@ -47,6 +47,33 @@ def test_index_rows_and_bill_carry_the_source(tmp_path: Path):
     assert "resets if this vault is moved, cloned, restored or re-synced" in text
 
 
+def test_a_stamp_dated_note_is_counted_as_dated_everywhere(tmp_path: Path, capsys):
+    """0.5.3. Since 0.5.2 a third source exists: the date the janitor's stamp recorded. Through 0.5.2
+    the bill and the map counted only mtime and frontmatter, so such a note was in neither count and
+    "X of N readable notes" undercounted N. One of each kind must read "1 of 3"."""
+    from janitor.map import build_map
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    (vault / "dated.md").write_text("---\ncreated: 2024-01-01\n---\n# Dated\n\nbody one\n", encoding="utf-8")
+    (vault / "bare.md").write_text("# Bare\n\nbody two\n", encoding="utf-8")
+    (vault / "stamped.md").write_text("---\njanitor:\n  bucket: junk\n  created_from_mtime: 2024-05-05\n---\n# Stamped\n\nbody three\n", encoding="utf-8")
+    index = build_index(vault)
+    assert {rel: index.notes[rel].age_source for rel in index.notes} == {"dated.md": "frontmatter", "bare.md": "mtime", "stamped.md": "stamp"}
+    _, plan, items, _ = prepare_vault(vault)
+    bill = build_bill(plan, items)
+    assert (bill.dated, bill.stamp_dated, bill.age_from_mtime) == (1, 1, 1)
+    text = render_bill(bill, live=False)
+    assert "age: 1 of 3 readable notes (33%) have no creation date in their frontmatter" in text  # 0.5.2: "1 of 2 (50%)"
+    assert "(1 other undated note(s) carry the date the janitor recorded at their first stamp, which does not reset)" in text
+    assert cli.main([str(vault), "--offline", "--json"]) == 0
+    out, err = capsys.readouterr()
+    assert "findings: 1 of 3 judged notes (33%) have no creation date in their frontmatter" in err
+    rows = json.loads(out)
+    assert {r["path"]: r["age_source"] for r in rows if r.get("kind") == "vote"} == {"dated.md": "frontmatter", "bare.md": "mtime", "stamped.md": "stamp"}
+    totals = build_map(index, rows)["totals"]
+    assert (totals["dated"], totals["stamp_dated"], totals["age_from_mtime"]) == (1, 1, 1)
+
+
 def test_cli_states_the_finding_at_the_end_and_in_json(tmp_path: Path, capsys):
     vault = _vault(tmp_path)
     assert cli.main([str(vault), "--offline"]) == 0

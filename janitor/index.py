@@ -85,7 +85,7 @@ class IndexedNote:
     locked: bool = False  # janitor.locked: true in frontmatter
     title_credential: bool = False  # the title itself holds a credential format: never a sibling title
     age_days: int | None = None  # creation age: frontmatter created/date if parseable, else mtime
-    age_source: str | None = None  # "frontmatter" | "mtime" | None. mtime-derived age resets on clone, restore or sync
+    age_source: str | None = None  # "frontmatter" | "stamp" (the date the janitor recorded at the first stamp) | "mtime" | None. Only an mtime-derived age resets on clone, restore or sync
 
     @property
     def folder(self) -> str:
