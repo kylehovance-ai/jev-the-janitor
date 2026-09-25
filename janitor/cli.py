@@ -582,8 +582,8 @@ def main(argv: list[str] | None = None) -> int:
     aged = [r for r in rows_out if r.get("kind") == "vote" and r.get("age_source")]
     from_mtime = sum(1 for r in aged if r["age_source"] == "mtime")
     if aged and from_mtime:
-        print(f"findings: {from_mtime} of {len(aged)} judged notes ({100 * from_mtime / len(aged):.0f}%) have no creation date in their frontmatter; "
-              f"their age comes from the filesystem and will reset if you move, clone, restore or re-sync this vault.", file=sys.stderr)
+        print(f"findings: {from_mtime} of {len(aged)} judged notes ({100 * from_mtime / len(aged):.0f}%) take their age from the filesystem "
+              f"(no creation date in their frontmatter, none recorded by a stamp); it resets if you move, clone, restore or re-sync this vault.", file=sys.stderr)
     if unreadable or undecodable:
         print(f"findings: {len(unreadable)} note(s) have frontmatter no YAML reader can parse and {len(undecodable)} are not valid UTF-8; "
               f"rows carry `findings` and the reason. A header that will not parse is a fact about the vault, not a failure of the run.", file=sys.stderr)

@@ -109,7 +109,7 @@ class Bill:
     errors: int = 0
     undecodable: int = 0  # finding: not valid UTF-8; never sent
     unreadable_headers: int = 0  # finding: frontmatter that no YAML reader can parse; judged on the body
-    age_from_mtime: int = 0  # finding: no creation date in the frontmatter; the age would reset on a clone
+    age_from_mtime: int = 0  # finding: the age comes from the filesystem (no creation date in the frontmatter, none recorded by a stamp) and would reset on a clone
     dated: int = 0  # notes whose age came from a frontmatter creation stamp
     stamp_dated: int = 0  # notes whose age came from the date the janitor's stamp recorded (0.5.2); it does not reset
     skipped: Counter = field(default_factory=Counter)  # rule -> notes
@@ -200,8 +200,8 @@ def render_bill(bill: Bill, *, live: bool) -> str:
     if bill.age_from_mtime:
         total = bill.age_from_mtime + bill.dated + bill.stamp_dated
         pct = 100 * bill.age_from_mtime / total if total else 0
-        lines.append(f"    age: {bill.age_from_mtime:,} of {total:,} readable notes ({pct:.0f}%) have no creation date in their frontmatter; "
-                     f"their age comes from the filesystem and resets if this vault is moved, cloned, restored or re-synced"
+        lines.append(f"    age: {bill.age_from_mtime:,} of {total:,} readable notes ({pct:.0f}%) take their age from the filesystem "
+                     f"(no creation date in their frontmatter, none recorded by a stamp); it resets if this vault is moved, cloned, restored or re-synced"
                      + (f" ({bill.stamp_dated:,} other undated note(s) carry the date the janitor recorded at their first stamp, which does not reset)"
                         if bill.stamp_dated else ""))
     if bill.max_usd is not None:

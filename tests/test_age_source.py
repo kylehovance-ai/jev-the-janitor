@@ -1,4 +1,4 @@
-"""A note with no creation date in its frontmatter has an age that resets on a clone. Say so.
+"""A note whose age comes from the filesystem (no creation date in its frontmatter, none recorded by a stamp) has an age that resets on a clone. Say so.
 
 Measured on a real vault: 54% of notes have no parseable creation stamp, so
 for them the creation-age fix changes nothing, because the data to fix it with is not in
@@ -43,8 +43,8 @@ def test_index_rows_and_bill_carry_the_source(tmp_path: Path):
     bill = build_bill(plan, items)
     assert (bill.dated, bill.age_from_mtime) == (2, 3)
     text = render_bill(bill, live=False)
-    assert "age: 3 of 5 readable notes (60%) have no creation date in their frontmatter" in text
-    assert "resets if this vault is moved, cloned, restored or re-synced" in text
+    assert "age: 3 of 5 readable notes (60%) take their age from the filesystem (no creation date in their frontmatter, none recorded by a stamp)" in text
+    assert "it resets if this vault is moved, cloned, restored or re-synced" in text
 
 
 def test_a_stamp_dated_note_is_counted_as_dated_everywhere(tmp_path: Path, capsys):
@@ -63,11 +63,11 @@ def test_a_stamp_dated_note_is_counted_as_dated_everywhere(tmp_path: Path, capsy
     bill = build_bill(plan, items)
     assert (bill.dated, bill.stamp_dated, bill.age_from_mtime) == (1, 1, 1)
     text = render_bill(bill, live=False)
-    assert "age: 1 of 3 readable notes (33%) have no creation date in their frontmatter" in text  # 0.5.2: "1 of 2 (50%)"
+    assert "age: 1 of 3 readable notes (33%) take their age from the filesystem (no creation date in their frontmatter, none recorded by a stamp)" in text  # 0.5.2: "1 of 2 (50%)"
     assert "(1 other undated note(s) carry the date the janitor recorded at their first stamp, which does not reset)" in text
     assert cli.main([str(vault), "--offline", "--json"]) == 0
     out, err = capsys.readouterr()
-    assert "findings: 1 of 3 judged notes (33%) have no creation date in their frontmatter" in err
+    assert "findings: 1 of 3 judged notes (33%) take their age from the filesystem (no creation date in their frontmatter, none recorded by a stamp)" in err
     rows = json.loads(out)
     assert {r["path"]: r["age_source"] for r in rows if r.get("kind") == "vote"} == {"dated.md": "frontmatter", "bare.md": "mtime", "stamped.md": "stamp"}
     totals = build_map(index, rows)["totals"]
@@ -78,7 +78,7 @@ def test_cli_states_the_finding_at_the_end_and_in_json(tmp_path: Path, capsys):
     vault = _vault(tmp_path)
     assert cli.main([str(vault), "--offline"]) == 0
     err = capsys.readouterr().err
-    assert "findings: 3 of 5 judged notes (60%) have no creation date in their frontmatter" in err
+    assert "findings: 3 of 5 judged notes (60%) take their age from the filesystem (no creation date in their frontmatter, none recorded by a stamp)" in err
     assert cli.main([str(vault), "--offline", "--json"]) == 0
     rows = {r["path"]: r for r in json.loads(capsys.readouterr().out)}
     assert sum(1 for r in rows.values() if r.get("age_source") == "mtime") == 3
@@ -90,4 +90,4 @@ def test_a_fully_dated_vault_says_nothing(tmp_path: Path, capsys):
     (vault / "a.md").write_text("---\ncreated: 2024-01-01\n---\n# A\n\nbody\n", encoding="utf-8")
     assert cli.main([str(vault), "--offline"]) == 0
     err = capsys.readouterr().err
-    assert "no creation date" not in err
+    assert "take their age from the filesystem" not in err

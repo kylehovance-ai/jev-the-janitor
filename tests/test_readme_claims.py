@@ -986,3 +986,24 @@ def test_the_docs_say_what_holds_after_the_051_audit():
     assert "the pre-flight and the run's closing lines count the `mtime` ones against all three" in readme
     assert "`age_source: frontmatter` or `mtime`" not in readme
     assert "and a second one when it is used" in readme and "the footer then names that figure as the second not from the rows" in readme
+
+
+def test_the_filesystem_age_claim_names_the_stamp_everywhere():
+    """0.5.4. "no creation date in their frontmatter; their age comes from the filesystem" was false
+    for a stamped undated note since 0.5.2: it has no creation date either, and its age comes from
+    the stamp. Every line and sentence on that subject now makes the filesystem age the subject and
+    names both conditions; the old form appears nowhere in the docs or the package."""
+    old_form = "have no creation date in their frontmatter; their age comes from the filesystem"
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "whose age comes from the filesystem (no parseable creation date in their frontmatter and no date recorded by a janitor stamp), which resets" in readme
+    assert "    age: 25 of 25 readable notes (100%) take their age from the filesystem (no creation date in their frontmatter, none recorded by a stamp); it resets if this vault is moved, cloned, restored or re-synced" in readme
+    sources = [readme, (ROOT / "SECURITY.md").read_text(encoding="utf-8")] + [p.read_text(encoding="utf-8") for p in sorted((ROOT / "janitor").glob("*.py"))]
+    for text in sources:
+        assert old_form not in text
+        assert "whose age therefore comes from the filesystem" not in text
+    # the program's two lines and the README's sample block say the same thing, byte for byte
+    from janitor.bill import Bill, render_bill
+    bill = Bill(question_chars=0, max_usd=None)
+    bill.age_from_mtime, bill.dated, bill.stamp_dated = 25, 0, 0
+    line = next(l for l in render_bill(bill, live=False).splitlines() if l.strip().startswith("age:"))
+    assert line in readme
