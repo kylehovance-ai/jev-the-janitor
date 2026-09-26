@@ -24,7 +24,8 @@ A pre-write gate. Jev votes on a note; code decides what to do. Jev never writes
 2. Send exactly seven fields, every text field redacted: `title`, `path` (vault-relative, posix), `aliases`,
    `frontmatter_keys` (names only, never values, never the tool's own `janitor` key), `excerpt` (the body, cut at
    `--excerpt-chars`, 16,000 by default), `other_note_titles` (same-folder siblings, ranked by overlap, at most 80)
-   and `graph` (counts and flags only: banded word count, heading and link counts, age band, `is_moc`, `is_orphan`). Nothing else.
+   and `graph` (counts and flags only, exactly these nine keys: `words` (banded), `headings`, `age_days` (banded),
+   `out_links`, `in_links`, `embeds`, `unresolved_links`, `is_moc`, `is_orphan`). Nothing else.
    `tests/test_docs_accuracy.py` compares this list with a real `sent` object.
 3. Read `bucket`, `bucket_confidence`, `persist`, `contains_secret` and, only under `--git-unsafe-below`,
    `safe_to_leave_in_git` (`janitor/policy.py`, `decide`).
