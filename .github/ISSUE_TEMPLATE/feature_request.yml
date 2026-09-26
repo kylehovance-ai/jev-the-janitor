@@ -1,0 +1,27 @@
+name: Feature request
+description: Something the janitor should do, or a claim it should be able to make
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This is a public page: describe your vault in shape and numbers, never in note text or real paths.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you were trying to do with your notes, and where the janitor stopped short.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like it to do
+      description: If it changes what leaves the machine, say so; that needs a test on the outgoing state and a line in SECURITY.md (CONTRIBUTING rule 7).
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you tried instead
+      description: A flag, a taxonomy edit, a denylist entry, a janitor.toml key.

@@ -1,0 +1,67 @@
+name: Bug report
+description: Something the janitor did, or said, that does not match the README
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Before you paste anything: this is a public page.** Never paste real note text, a key, `--show-payload`
+        output from a real vault, or a run journal. A journal holds every note's raw vault-relative path, and a
+        path is often more revealing than a title (POLICY.md says so). Replace paths with placeholders and
+        reproduce on `examples/demo-vault` or `fixtures/notes` with `--offline` where you can.
+  - type: input
+    id: version
+    attributes:
+      label: jev-the-janitor version
+      description: "`pip show jev-the-janitor` (there is no `--version` flag)"
+      placeholder: "0.5.7"
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      placeholder: "3.12.4"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "Windows 11 / macOS 15 / Ubuntu 24.04"
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: The command you ran
+      description: With vault paths replaced by placeholders such as `<vault>`.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: happened
+    attributes:
+      label: What happened
+      description: The output or the outcome, with any real path, title or note text replaced.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      description: Quote the README sentence you were relying on, if there is one.
+    validations:
+      required: true
+  - type: dropdown
+    id: reproduces
+    attributes:
+      label: Does it reproduce on the shipped fixtures?
+      description: "`jev-janitor examples/demo-vault --offline` or `jev-janitor fixtures/notes --offline` sends nothing and needs no key."
+      options:
+        - "Yes, on examples/demo-vault with --offline"
+        - "Yes, on fixtures/notes with --offline"
+        - "No, only on my own vault"
+        - "I have not tried"
+    validations:
+      required: true

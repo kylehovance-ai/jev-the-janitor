@@ -1,5 +1,7 @@
 # Jev the Janitor
 
+[![ci](https://github.com/kylehovance-ai/jev-the-janitor/actions/workflows/ci.yml/badge.svg)](https://github.com/kylehovance-ai/jev-the-janitor/actions/workflows/ci.yml)
+
 A janitor for markdown vaults. It asks [TypeSafe Jev](https://typesafe.ai) which bucket each note belongs in. It never deletes a note and never rewrites a note's body; the most it does is add a block of frontmatter or move a suspected secret to a quarantine folder.
 
 This project is not affiliated with, endorsed by, or supported by TypeSafe. It calls their public API.
@@ -8,7 +10,7 @@ This project is not affiliated with, endorsed by, or supported by TypeSafe. It c
 
 **Who this is for.** Anyone with a folder of `.md` files that has grown past what they can hand-sort: Obsidian vaults, wikis, the notes directory a team of tools keeps dumping into. Nothing here depends on Obsidian.
 
-**Does it work.** Yes, with limits stated below. It has been run against live Jev on an invented fixture vault and on 26 real notes from one production vault, with the results measured and reported in this README. It has not been calibrated on anyone else's vault. Expect to edit the taxonomy after your first dry run.
+**Does it work.** Yes, with limits stated below. It has been run against live Jev on an invented fixture vault, on the 250-note demo vault in `examples/`, on 26 real notes from one production vault, and, in September 2026 on a 0.4.x release, on one full real vault of 25,107 notes: 17,140 judged by Jev, 1,742 decided locally, 6,216 withheld and 9 refused by the API, for $2.51 in 4 min 56 s at 16 workers; the results are measured and reported in this README. It has not been calibrated on anyone else's vault. Expect to edit the taxonomy after your first dry run.
 
 ```
 note excerpt (redacted locally)

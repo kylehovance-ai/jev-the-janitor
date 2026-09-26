@@ -4,8 +4,12 @@ This is the policy the default taxonomy and thresholds encode. If your rules dif
 edit `janitor/taxonomies/vault_memory.yaml` (what Jev is told) and `janitor/policy.py` (what the
 code does with the vote).
 
-Promote, park and drop are **labels written to frontmatter**, not file movements. The only
-thing this tool moves is a quarantined note, and the only thing it deletes is nothing.
+Promote, park and drop are the three positions of one number, and the stamp writes the
+number: `persist: <0 to 2>`, Jev's weighted position between drop (0), park (1) and
+promote (2), written to the `janitor:` block of the note's frontmatter beside `bucket`
+(the report reads the nearest word back from it). Nothing is moved for any of the three.
+The only thing this tool moves is a quarantined note, and the only thing it deletes is
+nothing.
 
 ## Promote (long-term memory or decision log)
 
@@ -26,7 +30,12 @@ thing this tool moves is a quarantined note, and the only thing it deletes is no
 - One-off debugging
 - Empty or boilerplate files
 
-## Quarantine (move, unchanged, to `_janitor/quarantine/<vault-relative path>`, git-ignored, logged in `manifest.jsonl`)
+## Quarantine (a move to `_janitor/quarantine/<vault-relative path>`, git-ignored, logged in `manifest.jsonl`)
+
+The body moves byte-for-byte. A note whose header parses is stamped with its `janitor:` block
+first, so the moved note says why it was moved; a note whose header does not parse moves
+exactly as it is, unstamped, and the reason is in the manifest either way (the docs said
+"unchanged" through 0.4.10, which was true of the body and not of the header).
 
 - **A local redaction hit on a credential format** the machine can check: `KEY`, `WEBHOOK`,
   `JWT`, `PEM`, `AWS_SECRET`, `BEARER`, `URL_CREDENTIAL`. This fires on its own, before the vote is consulted at
@@ -65,7 +74,10 @@ not scrubbed of vault identity and cannot be.
 ## Never
 
 - Store credentials, even if a note says "remember this password"
-- Send a whole vault, or a whole note body
+- Send anything but the seven redacted fields (title, path, aliases, frontmatter key names, the
+  excerpt, sibling titles, graph counts and flags). The excerpt is the body after local redaction,
+  cut at `--excerpt-chars` (16,000 by default), so a note under the cap goes whole: on the demo
+  vault 227 of the 229 sent notes did. Nothing else of the note or the vault leaves.
 - Let Jev write, summarize, or rewrite anything
 - Rewrite a note body on `--apply`; the body is spliced back byte-for-byte
 - Delete anything

@@ -165,4 +165,7 @@ Never commit `.env` or a real `TYPESAFE_API_KEY`. The `.gitignore` excludes `.en
 ## Reporting
 
 If you find a way for note content to leave the machine that this document does not
-describe, report it privately to the repository owner rather than in a public issue.
+describe, report it privately rather than in a public issue: use "Report a vulnerability"
+on the repository's Security tab (`https://github.com/kylehovance-ai/jev-the-janitor/security/advisories/new`),
+which only the maintainer can read. Do not include real note text, a key, `--show-payload`
+output from a real vault or a run journal in the report; describe the shape instead.

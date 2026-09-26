@@ -8,7 +8,7 @@ def test_denylist_matches_whole_words_only():
     assert r.text == "Anniversary party for [NAME] and Annabel; call [NAME] tomorrow ([NAME]'s idea)."
     assert r.hits == ["NAME"]
     assert redact("Annie and Joanna", denylist=["Ann"]).text == "Annie and Joanna"
-    assert redact("Rowan Hovance-Smith met Rowan.", denylist=["Rowan"]).text == "[NAME] Hovance-Smith met [NAME]."
+    assert redact("Rowan Ashby-Vale met Rowan.", denylist=["Rowan"]).text == "[NAME] Ashby-Vale met [NAME]."  # a hyphenated surname beside the name stays
     assert redact("see O'Brien!", denylist=["O'Brien"]).text == "see [NAME]!"  # punctuation inside a name still works
 
 

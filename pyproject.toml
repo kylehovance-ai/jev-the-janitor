@@ -1,6 +1,6 @@
 [project]
 name = "jev-the-janitor"
-version = "0.5.6"
+version = "0.5.7"
 description = "A janitor for markdown vaults, powered by TypeSafe Jev. Jev votes, your code files, you review the low-confidence pile."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -10,6 +10,11 @@ keywords = ["jev", "typesafe", "obsidian", "markdown", "vault", "memory", "syste
 dependencies = [
   "pyyaml>=6.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/kylehovance-ai/jev-the-janitor"
+Repository = "https://github.com/kylehovance-ai/jev-the-janitor"
+Issues = "https://github.com/kylehovance-ai/jev-the-janitor/issues"
 
 [project.optional-dependencies]
 jev = ["typesafe-sdk>=0.7.0"]
