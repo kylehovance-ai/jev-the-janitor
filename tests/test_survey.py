@@ -5,6 +5,7 @@ Nobody lets an unknown tool make 20,000 calls over their private notes on first 
 
 import json
 import os
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from janitor import cli
@@ -26,11 +27,13 @@ class Recording(FixtureClient):
 
 def _vault(tmp_path: Path) -> Path:
     vault = tmp_path / "vault"
+    # two days before today's UTC date (the date the index ages notes by), so these notes band to age1 on any day
+    recent = (datetime.now(timezone.utc).date() - timedelta(days=2)).isoformat()
     for folder in ("notes", "projects", "archive"):
         (vault / folder).mkdir(parents=True)
         for i in range(12):
             words = ("w " * (30 if i % 3 == 0 else 300 if i % 3 == 1 else 2500)).strip()
-            created = "2026-09-20" if i % 2 else "2023-01-01"
+            created = recent if i % 2 else "2023-01-01"
             (vault / folder / f"{folder[0]}{i:02d}.md").write_text(f"---\ncreated: {created}\n---\n# {folder} {i}\n\n{words} {folder} {i}\n", encoding="utf-8")
     (vault / "notes" / "empty.md").write_text("", encoding="utf-8")
     (vault / "notes" / "leak.md").write_text(f"# leak\n\n{KEY}\n", encoding="utf-8")
@@ -106,5 +109,5 @@ def test_stratum_of_uses_top_folder_and_banded_facts(tmp_path: Path):
     _, plan, items, _ = prepare_vault(vault)
     by = {it.rel: it for it in items}
     assert stratum_of(by["notes/n00.md"]) == ("notes/", "stub", "age1000")
-    assert stratum_of(by["archive/a01.md"]) == ("archive/", "short", "age1")  # created 2026-09-20; today is after 2026-09-21
+    assert stratum_of(by["archive/a01.md"]) == ("archive/", "short", "age1")  # created two days before today: band 1, on any day
     assert stratum_of(by["projects/p02.md"])[1] == "long"

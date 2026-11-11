@@ -5,7 +5,7 @@ In live mode this tool sends redacted note excerpts to TypeSafe's hosted Jev API
 
 ## Exactly what is sent, per note
 
-This list is the same as the README's "What leaves the machine" and is what `build_state`
+This list is the same as "What leaves the machine" in [docs/privacy-contract.md](docs/privacy-contract.md) and is what `build_state`
 in `janitor/scan.py` assembles as the note's state. Beside that state, every call carries the
 taxonomy's questions exactly as written (the `questions` argument of the client); nothing else is sent.
 

@@ -411,6 +411,6 @@ def test_cli_refuses_a_malformed_file_before_anything(tmp_path: Path):
 
 
 def test_readme_and_security_describe_the_records_contract():
-    for doc in ("README.md", "SECURITY.md"):
+    for doc in ("docs/records.md", "SECURITY.md"):
         text = (ROOT / doc).read_text(encoding="utf-8")
         assert "jev-records" in text and "`sent`" in text, doc

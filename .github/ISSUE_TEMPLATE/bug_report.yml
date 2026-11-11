@@ -1,5 +1,5 @@
 name: Bug report
-description: Something the janitor did, or said, that does not match the README
+description: Something the janitor did, or said, that does not match the README or a page in docs/
 labels: ["bug"]
 body:
   - type: markdown
@@ -50,7 +50,7 @@ body:
     id: expected
     attributes:
       label: What you expected
-      description: Quote the README sentence you were relying on, if there is one.
+      description: Quote the README or docs/ sentence you were relying on, if there is one.
     validations:
       required: true
   - type: dropdown

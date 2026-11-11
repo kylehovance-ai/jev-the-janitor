@@ -3,7 +3,8 @@
 Duplicate detection, sibling titles, graph facts and the lock bit all come from here.
 """
 
-from datetime import date
+import os
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -108,6 +109,8 @@ def test_orphan_needs_age(tmp_path: Path):
     p = tmp_path / "old.md"
     p.write_text("# Old\n\nbody\n", encoding="utf-8")
     (tmp_path / "linker.md").write_text("# Linker\n\n[[elsewhere]]\n", encoding="utf-8")  # one note links out, so the graph is not sparse
+    year_before = datetime(2026, 1, 1, tzinfo=timezone.utc).timestamp()
+    os.utime(p, (year_before, year_before))  # the mtime is set, not left at "now", so the age cannot shrink as the real date nears `today`
     index = build_index(tmp_path, today=date(2027, 1, 1))  # a year from the mtime
     assert index.facts("old.md")["age_days"] > 30
     assert index.facts("old.md")["is_orphan"] is True

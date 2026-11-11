@@ -154,6 +154,6 @@ def test_journal_header_records_the_cap(tmp_path: Path):
 
 
 def test_readme_states_the_default_and_the_flag():
-    readme = (Path(__file__).resolve().parent.parent / "README.md").read_text(encoding="utf-8")
-    assert "the first 16,000 characters of the body after local redaction by default" in readme
-    assert "`--excerpt-chars N` sends the first N, `--excerpt-chars full` sends whole notes" in readme
+    contract = (Path(__file__).resolve().parent.parent / "docs" / "privacy-contract.md").read_text(encoding="utf-8")
+    assert "the first 16,000 characters of the body after local redaction by default" in contract
+    assert "`--excerpt-chars N` sends the first N, `--excerpt-chars full` sends whole notes" in contract

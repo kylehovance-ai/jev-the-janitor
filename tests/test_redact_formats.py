@@ -142,7 +142,7 @@ def test_readme_and_security_name_every_format_family():
         "OpenAI", "Anthropic", "Stripe", "AWS", "Google", "GitHub", "GitLab", "Slack", "npm",
         "Hugging Face", "SendGrid", "Telegram", "Discord",
     }
-    for doc in ("README.md", "SECURITY.md"):
+    for doc in ("docs/privacy-contract.md", "SECURITY.md"):
         text = (ROOT / doc).read_text(encoding="utf-8")
         missing = {f for f in families if f not in text}
         assert not missing, (doc, missing)
@@ -151,8 +151,8 @@ def test_readme_and_security_name_every_format_family():
     for family in families:
         assert family in named, family
     # The README's sentence must not claim "and Slack formats" without the webhook.
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert re.search(r"webhook", readme, re.IGNORECASE)
+    contract = (ROOT / "docs" / "privacy-contract.md").read_text(encoding="utf-8")
+    assert re.search(r"webhook", contract, re.IGNORECASE)
 
 
 def test_no_file_in_the_tree_holds_a_credential_shaped_literal():

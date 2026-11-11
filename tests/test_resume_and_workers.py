@@ -201,8 +201,8 @@ def test_journal_info_needs_no_key(tmp_path: Path, capsys, monkeypatch):
 
 def test_default_workers_is_8_and_documented():
     assert cli.PROFILE_DEFAULTS["workers"][0] == 8  # resolved by apply_profile when neither flag nor janitor.toml sets it
-    readme = (Path(__file__).resolve().parent.parent / "README.md").read_text(encoding="utf-8")
-    assert "the default is 8 and 16 is the measured optimum" in readme
+    journal_doc = (Path(__file__).resolve().parent.parent / "docs" / "run-journal.md").read_text(encoding="utf-8")
+    assert "the default is 8 and 16 is the measured optimum" in journal_doc
 
 
 class Slow(Counting):

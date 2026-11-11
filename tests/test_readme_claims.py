@@ -22,7 +22,6 @@ from janitor.schema import DEFAULT_TAXONOMY, REQUIRED_NOULS, load_taxonomy
 
 ROOT = Path(__file__).resolve().parent.parent
 
-README = Path(__file__).resolve().parent.parent / "README.md"
 
 
 class Recording(FixtureClient):
@@ -175,21 +174,21 @@ def test_readme_bucket_and_noul_lists_match_taxonomy():
     from janitor.schema import buckets, nouls
 
     tax = load_taxonomy()
-    readme = README.read_text(encoding="utf-8")
+    asked = (ROOT / "docs" / "what-jev-is-asked.md").read_text(encoding="utf-8")
     for bucket in buckets(tax):
-        assert f"- `{bucket}`:" in readme, f"bucket {bucket} not documented in README"
+        assert f"- `{bucket}`:" in asked, f"bucket {bucket} not documented in docs/what-jev-is-asked.md"
     assert set(buckets(tax)) == {"durable_memory", "project_decision", "code_note", "reference", "log_entry", "ephemeral", "junk", "needs_review"}
     for noul in REQUIRED_NOULS:
-        assert f"`{noul}`" in readme, f"noul {noul} not documented in README"
+        assert f"`{noul}`" in asked, f"noul {noul} not documented in docs/what-jev-is-asked.md"
     assert set(nouls(tax)) == set(REQUIRED_NOULS)
 
 
 def test_readme_default_sensitive_list_matches_code():
     from janitor.redact import DEFAULT_SENSITIVE_PATH_PARTS
 
-    readme = README.read_text(encoding="utf-8")
+    contract = (ROOT / "docs" / "privacy-contract.md").read_text(encoding="utf-8")
     documented = "`family`, `private`, `personal`, `secrets`, `inbox`"
-    assert documented in readme
+    assert documented in contract
     assert DEFAULT_SENSITIVE_PATH_PARTS == ("family", "private", "personal", "secrets", "inbox")
 
 
@@ -229,16 +228,16 @@ def test_fixture_table_offline_column():
 def test_readme_fingerprint_matches_current_taxonomy():
     from janitor.schema import taxonomy_fingerprint
 
-    readme = README.read_text(encoding="utf-8")
-    assert f"taxonomy: {taxonomy_fingerprint()}" in readme, "README frontmatter example shows a stale fingerprint"
+    contract = (ROOT / "docs" / "privacy-contract.md").read_text(encoding="utf-8")
+    assert f"taxonomy: {taxonomy_fingerprint()}" in contract, "the privacy contract's frontmatter example shows a stale fingerprint"
     assert yaml.safe_load(DEFAULT_TAXONOMY.read_text(encoding="utf-8"))["questions"]["bucket"]["options"]["log_entry"].startswith("A dated run report")
 
 
 # --- README:83 "even then its title is never listed as sibling context for any other note" ---
 
 def test_readme_states_the_sibling_context_clause_and_code_enforces_it(tmp_path: Path):
-    readme = README.read_text(encoding="utf-8")
-    assert "and even then its title is never listed as sibling context for any other note" in readme
+    contract = (ROOT / "docs" / "privacy-contract.md").read_text(encoding="utf-8")
+    assert "and even then its title is never listed as sibling context for any other note" in contract
     (tmp_path / "family").mkdir()
     (tmp_path / "family" / "mom.md").write_text("# Mom Zebra Diagnosis\n\nbody\n", encoding="utf-8")
     (tmp_path / "notes").mkdir()
@@ -252,9 +251,9 @@ def test_readme_states_the_sibling_context_clause_and_code_enforces_it(tmp_path:
 
 
 def test_readme_states_that_the_named_path_is_tested_against_its_own_folders():
-    readme = README.read_text(encoding="utf-8")
-    assert "The path you name is tested too, against its own absolute folder names" in readme
-    assert "`jev-janitor ./vault/family` skips everything under it" in readme
+    contract = (ROOT / "docs" / "privacy-contract.md").read_text(encoding="utf-8")
+    assert "The path you name is tested too, against its own absolute folder names" in contract
+    assert "`jev-janitor ./vault/family` skips everything under it" in contract
 
 
 # --- 0.4.8: every README and SECURITY claim true (an outside claim-audit of 0.4.7) ----------------
@@ -298,7 +297,7 @@ def test_readme_placeholder_words_equal_the_code_and_a_bracketed_real_password_c
     bracketed value is a placeholder only when what is inside is itself one."""
     from janitor.redact import URL_PASSWORD_WORDS, redact
 
-    for doc in ("README.md", "SECURITY.md"):
+    for doc in ("docs/privacy-contract.md", "SECURITY.md"):
         text = (ROOT / doc).read_text(encoding="utf-8")
         m = re.search(r"the words\s+(`\w+`(?:,\s+`\w+`)*\s+and\s+`\w+`)\s+in any case", text)
         assert m, doc
@@ -317,8 +316,8 @@ def test_error_rate_stop_message_and_readme_say_a_running_total():
 
     src = (ROOT / "janitor" / "scan.py").read_text(encoding="utf-8")
     assert "notes sent so far failed" in src and "of the first {" not in src
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert "Once 50 notes have been sent, if more than 20% of all the notes sent so far have failed" in readme
+    journal_doc = (ROOT / "docs" / "run-journal.md").read_text(encoding="utf-8")
+    assert "Once 50 notes have been sent, if more than 20% of all the notes sent so far have failed" in journal_doc
     assert scan_module.ERROR_STOP_WINDOW == 50 and scan_module.ERROR_STOP_RATIO == 0.2
 
 
@@ -345,10 +344,10 @@ def test_preflight_line_order_matches_the_readme(tmp_path: Path):
     assert lines[0].startswith("  profile:"), lines[:3]
     assert lines[1].startswith("jev-janitor pre-flight:"), lines[:3]
     assert lines[2].startswith("  excerpt: the first 16,000 characters"), lines[:3]
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert "The third line (after the profile line and the header) always names the excerpt cap" in readme
+    contract = (ROOT / "docs" / "privacy-contract.md").read_text(encoding="utf-8")
+    assert "The third line (after the profile line and the header) always names the excerpt cap" in contract
     # the illustrative block is real output: its header counts agree with its folder lists
-    block = re.search(r"```\n  profile: [^\n]*\n(jev-janitor pre-flight: .*?)\n```", readme, re.S).group(1)
+    block = re.search(r"```\n  profile: [^\n]*\n(jev-janitor pre-flight: .*?)\n```", contract, re.S).group(1)
     head = re.match(r"jev-janitor pre-flight: (\d+) of (\d+) notes", block)
     sending, total = int(head.group(1)), int(head.group(2))
     inc_part, skip_part = block.split("folders skipped", 1)
@@ -363,8 +362,8 @@ def test_preflight_line_order_matches_the_readme(tmp_path: Path):
 
 
 def test_stamp_example_in_readme_has_exactly_the_keys_stamp_writes(tmp_path: Path):
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    block = re.search(r"```yaml\njanitor:\n(.*?)```", readme, re.S).group(1)
+    contract = (ROOT / "docs" / "privacy-contract.md").read_text(encoding="utf-8")
+    block = re.search(r"```yaml\njanitor:\n(.*?)```", contract, re.S).group(1)
     documented = [line.strip().split(":")[0] for line in block.splitlines() if line.strip()]
     note = tmp_path / "n.md"
     note.write_text("# N\n\nbody\n", encoding="utf-8")
@@ -385,8 +384,8 @@ def test_review_pile_line_shapes_match_the_readme(tmp_path: Path):
     assert "- [[a]] suggested `reference` at confidence 0.41, margin 0.05 (jev)" in text
     assert "- [[b]] quarantine: local redaction hit: KEY (not moved (dry run))" in text
     assert "- [[c]] quarantine: local redaction hit: KEY (_janitor/quarantine/c.md)" in text
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert "a quarantined note's line carries the reason and where the note now sits, or `not moved (dry run)`" in readme
+    triage_doc = (ROOT / "docs" / "local-triage.md").read_text(encoding="utf-8")
+    assert "a quarantined note's line carries the reason and where the note now sits, or `not moved (dry run)`" in triage_doc
 
 
 def test_undecodable_is_a_skip_row_as_the_readme_says(tmp_path: Path):
@@ -395,16 +394,16 @@ def test_undecodable_is_a_skip_row_as_the_readme_says(tmp_path: Path):
     rows = scan_vault(tmp_path, client=FixtureClient(), offline=True)
     bad = next(r for r in rows if r["path"] == "bad.md")
     assert bad["kind"] == "skip" and bad.get("findings") == ["undecodable"]
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert 'becomes a `skip` row with `findings: ["undecodable"]`' in readme
+    contract = (ROOT / "docs" / "privacy-contract.md").read_text(encoding="utf-8")
+    assert 'becomes a `skip` row with `findings: ["undecodable"]`' in contract
 
 
 def test_readme_names_every_creation_key():
     from janitor.index import CREATION_KEYS
 
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    contract = (ROOT / "docs" / "privacy-contract.md").read_text(encoding="utf-8")
     for key in CREATION_KEYS:
-        assert f"`{key}`" in readme, key
+        assert f"`{key}`" in contract, key
 
 
 def test_records_card_rule_is_the_first_digit_rule_too():
@@ -412,14 +411,14 @@ def test_records_card_rule_is_the_first_digit_rule_too():
 
     state, hits = build_record_state({"n": 1000000000000008, "card": 4111111111111111}, None)
     assert state["fields"]["n"] == 1000000000000008 and state["fields"]["card"] == "[CARD]" and hits == ["CARD"]
-    for doc in ("README.md", "SECURITY.md"):
+    for doc in ("docs/records.md", "SECURITY.md"):
         assert "starts with" in (ROOT / doc).read_text(encoding="utf-8")
 
 
 def test_the_two_self_disagreeing_numbers_now_agree():
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert readme.count("median confidence 0.33") == 2 and "median confidence 0.35" not in readme
-    assert "effect on the 26 notes (21 scans, 5 stubs)" in readme
+    calibration = (ROOT / "docs" / "calibration.md").read_text(encoding="utf-8")
+    assert calibration.count("median confidence 0.33") == 2 and "median confidence 0.35" not in calibration
+    assert "effect on the 26 notes (21 scans, 5 stubs)" in calibration
 
 
 def test_a_templated_user_or_host_makes_a_bracketed_password_a_template():
@@ -431,8 +430,8 @@ def test_a_templated_user_or_host_makes_a_bracketed_password_a_template():
     real = "".join(("MyReal", "Password"))
     for text in ("postgres://app:" + "{db_pw}" + "@localhost/db", "postgres://app:{" + real + "}@localhost", "postgres://app:" + real + "@{host}/db"):
         assert redact(text).hits == ["URL_CREDENTIAL"], text
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert "whose user or host is itself a template" in readme and "with a literal user and host, still counts" in readme
+    contract = (ROOT / "docs" / "privacy-contract.md").read_text(encoding="utf-8")
+    assert "whose user or host is itself a template" in contract and "with a literal user and host, still counts" in contract
 
 
 # --- 0.4.9: the six claims an outside re-check of 0.4.8 still found untrue ----------------------
@@ -445,9 +444,9 @@ def test_readme_lists_exactly_the_graph_facts_the_index_sends(tmp_path: Path):
     (tmp_path / "a.md").write_text("# A\n\nbody\n", encoding="utf-8")
     index = build_index(tmp_path)
     keys = list(index.facts("a.md").keys())
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    m = re.search(r"any of the nine graph facts \((.*?)\)\.", readme)
-    assert m, "the README no longer lists the graph facts"
+    contract = (ROOT / "docs" / "privacy-contract.md").read_text(encoding="utf-8")
+    m = re.search(r"any of the nine graph facts \((.*?)\)\.", contract)
+    assert m, "the privacy contract no longer lists the graph facts"
     listed = re.findall(r"`(\w+)`", m.group(1))
     assert listed == keys == ["words", "headings", "age_days", "out_links", "in_links", "embeds", "unresolved_links", "is_moc", "is_orphan"]
     body = "# T\n\n" + ("filler line of text.\n" * (MAX_EXCERPT // 20))
@@ -473,7 +472,7 @@ def test_an_unparseable_creation_key_falls_back_to_mtime(tmp_path: Path):
     (tmp_path / "good.md").write_text("---\ncreated: 2024-01-15\n---\n# B\n\nbody\n", encoding="utf-8")
     rows = {r["path"]: r for r in scan_vault(tmp_path, client=FixtureClient(), offline=True)}
     assert rows["bad.md"]["age_source"] == "mtime" and rows["good.md"]["age_source"] == "frontmatter"
-    assert "whose value does not parse (`created: not-a-date` counts as none)" in (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "whose value does not parse (`created: not-a-date` counts as none)" in (ROOT / "docs" / "privacy-contract.md").read_text(encoding="utf-8")
 
 
 def test_alias_is_read_only_when_aliases_is_absent(tmp_path: Path):
@@ -483,7 +482,7 @@ def test_alias_is_read_only_when_aliases_is_absent(tmp_path: Path):
     scan_vault(tmp_path, client=rec, offline=True)
     sent = {s["path"]: s["aliases"] for s in rec.states}
     assert sent["both.md"] == ["Plural One"] and sent["single.md"] == ["Singular"]
-    for doc in ("README.md", "SECURITY.md"):
+    for doc in ("docs/privacy-contract.md", "SECURITY.md"):
         assert "when there is no `aliases` key (with both present only `aliases` is sent)" in (ROOT / doc).read_text(encoding="utf-8"), doc
 
 
@@ -503,8 +502,8 @@ def test_row_carries_title_sent_and_a_sibling_count_but_no_excerpt_without_show_
     a = rows["a.md"]
     assert a["title_sent"] == "Alpha [EMAIL]" and a["sibling_titles_sent"] == 1 and "sent" not in a
     assert "SECRET-BODY-SENTINEL" not in json.dumps(a) and "Beta" not in json.dumps(a)
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert "the redacted title (`title_sent`) and the number of sibling titles sent (`sibling_titles_sent`), but neither the excerpt nor the sibling titles themselves" in readme
+    contract = (ROOT / "docs" / "privacy-contract.md").read_text(encoding="utf-8")
+    assert "the redacted title (`title_sent`) and the number of sibling titles sent (`sibling_titles_sent`), but neither the excerpt nor the sibling titles themselves" in contract
 
 
 # --- 0.4.10: which graph facts depend on other notes, pinned per clause -----------------------
@@ -529,8 +528,8 @@ def test_readme_names_exactly_the_facts_that_depend_on_other_notes(tmp_path: Pat
     """The README's clause lists in_links, unresolved_links and is_orphan. Pinned against
     behaviour: for each of the nine facts, whether editing OTHER notes (never the note
     itself) can move it. Exactly those three move; the other six do not."""
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    clause = re.search(r"three facts depend on other notes, so a key can change without the note being edited: (.*?)\. `is_moc` does not", readme).group(1)
+    contract = (ROOT / "docs" / "privacy-contract.md").read_text(encoding="utf-8")
+    clause = re.search(r"three facts depend on other notes, so a key can change without the note being edited: (.*?)\. `is_moc` does not", contract).group(1)
     named = re.findall(r"`(\w+)`", clause)
     assert [n for n in ["in_links", "unresolved_links", "is_orphan"] if n in named] == ["in_links", "unresolved_links", "is_orphan"]
     assert "is_moc" not in named and "words" not in named and "headings" not in named
@@ -641,8 +640,8 @@ def test_a_denylisted_name_matches_across_hyphens_and_underscores_in_paths_and_w
     excerpt = next(s for s in rec.states if s["title"] == "T1")["excerpt"]
     assert "[[[NAME]]] and [[[NAME]]]" in excerpt
     assert "JaneDoe" in excerpt  # the documented residual: no separator, no match
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert "the name run together (`JaneDoe`)" in readme  # 0.5.6: named among the forms it does not match
+    contract = (ROOT / "docs" / "privacy-contract.md").read_text(encoding="utf-8")
+    assert "the name run together (`JaneDoe`)" in contract  # 0.5.6: named among the forms it does not match
 
 
 def test_an_apply_run_does_not_invalidate_its_own_cache(tmp_path: Path, monkeypatch, capsys):
@@ -961,15 +960,17 @@ def test_a_quarantined_note_with_an_unreadable_header_is_moved_unstamped_and_the
     assert "janitor:" in (tmp_path / "_janitor" / "quarantine" / "ok.md").read_text(encoding="utf-8")  # stamped, then moved
     manifest = [json.loads(line) for line in (tmp_path / "_janitor" / "quarantine" / "manifest.jsonl").read_text(encoding="utf-8").splitlines()]
     assert {m["reason"] for m in manifest} and all("KEY" in m["reason"] for m in manifest)
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    contract = (ROOT / "docs" / "privacy-contract.md").read_text(encoding="utf-8")
     security = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
-    assert "a note whose header does not parse is moved exactly as it is, unstamped" in readme
+    assert "a note whose header does not parse is moved exactly as it is, unstamped" in contract
     assert "a note whose header" in security and "does not parse is moved as it is, unstamped" in security
 
 
 def test_the_docs_say_what_holds_after_the_051_audit():
     """C1, C2, C3, C4, C6: each overclaim the audit found, replaced by the measured statement."""
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    contract = (ROOT / "docs" / "privacy-contract.md").read_text(encoding="utf-8")
+    triage_doc = (ROOT / "docs" / "local-triage.md").read_text(encoding="utf-8")
     security = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
     assert "second brain of 250 notes, 251 files with the vault's own README" in readme  # C1: 250 notes, 251 scanned
     # C2, counted through report.diagnose on the committed run rather than pinned as a string: the
@@ -990,19 +991,19 @@ def test_the_docs_say_what_holds_after_the_051_audit():
             f"the commonest pairs were `ephemeral` against `log_entry` (7 notes), `durable_memory` against `project_decision` (6) and `durable_memory` against `ephemeral` (5). "
             f"In the {D['n_pile']}th, `needs_review` was the runner-up, and no pile note voted `needs_review`.") in readme
     assert "every one of them a split" not in readme and "abstaining" not in readme and "in the other `needs_review`" not in readme
-    assert "the name in each of `jane-doe.md`, `Jane_Doe.md` and a `[[jane-doe]]` link becomes `[NAME]` (`[NAME].md`, `[NAME].md` and `[[[NAME]]]`" in readme  # C3
-    assert "a note's first stamp added a key name and changed its cache key" in readme  # C4
-    assert "every `--apply` run changed the cache key of every note it stamped" not in readme
+    assert "the name in each of `jane-doe.md`, `Jane_Doe.md` and a `[[jane-doe]]` link becomes `[NAME]` (`[NAME].md`, `[NAME].md` and `[[[NAME]]]`" in contract  # C3
+    assert "a note's first stamp added a key name and changed its cache key" in contract  # C4
+    assert "every `--apply` run changed the cache key of every note it stamped" not in contract
     assert "except the tool's own `janitor` key, which is not sent" in security  # C6
     assert "the manifest either way" in security  # C5
     # the "unrelated folder" examples are fictional ones, in both files
-    assert "`Recipes/` or `garden/beds/` get no warning" in readme and "(`Recipes/`, `garden/beds/`)" in security
+    assert "`Recipes/` or `garden/beds/` get no warning" in contract and "(`Recipes/`, `garden/beds/`)" in security
     # 0.5.3: the third age source is stated wherever the other two are
-    assert "until its first `--apply` stamp: the stamp records that date once as `janitor.created_from_mtime`" in readme
-    assert "`age_source: frontmatter`, `stamp` (the date the janitor recorded at the note's first stamp, which does not reset) or `mtime`" in readme
-    assert "the pre-flight and the run's closing lines count the `mtime` ones against all three" in readme
-    assert "`age_source: frontmatter` or `mtime`" not in readme
-    assert "and a second one when it is used" in readme and "the footer then names that figure as the second not from the rows" in readme
+    assert "until its first `--apply` stamp: the stamp records that date once as `janitor.created_from_mtime`" in contract
+    assert "`age_source: frontmatter`, `stamp` (the date the janitor recorded at the note's first stamp, which does not reset) or `mtime`" in triage_doc
+    assert "the pre-flight and the run's closing lines count the `mtime` ones against all three" in triage_doc
+    assert "`age_source: frontmatter` or `mtime`" not in contract and "`age_source: frontmatter` or `mtime`" not in triage_doc
+    assert "and a second one when it is used" in triage_doc and "the footer then names that figure as the second not from the rows" in triage_doc
 
 
 def test_the_filesystem_age_claim_names_the_stamp_everywhere():
@@ -1012,15 +1013,19 @@ def test_the_filesystem_age_claim_names_the_stamp_everywhere():
     names both conditions; the old form appears nowhere in the docs or the package."""
     old_form = "have no creation date in their frontmatter; their age comes from the filesystem"
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert "whose age comes from the filesystem (no parseable creation date in their frontmatter and no date recorded by a janitor stamp), which resets" in readme
-    assert "    age: 25 of 25 readable notes (100%) take their age from the filesystem (no creation date in their frontmatter, none recorded by a stamp); it resets if this vault is moved, cloned, restored or re-synced" in readme
-    sources = [readme, (ROOT / "SECURITY.md").read_text(encoding="utf-8")] + [p.read_text(encoding="utf-8") for p in sorted((ROOT / "janitor").glob("*.py"))]
+    contract = (ROOT / "docs" / "privacy-contract.md").read_text(encoding="utf-8")
+    triage_doc = (ROOT / "docs" / "local-triage.md").read_text(encoding="utf-8")
+    assert "whose age comes from the filesystem (no parseable creation date in their frontmatter and no date recorded by a janitor stamp), which resets" in triage_doc
+    assert "    age: 25 of 25 readable notes (100%) take their age from the filesystem (no creation date in their frontmatter, none recorded by a stamp); it resets if this vault is moved, cloned, restored or re-synced" in contract
+    docs = [p.read_text(encoding="utf-8") for p in sorted((ROOT / "docs").glob("*.md"))]  # 0.5.9: the README's moved sections
+    assert len(docs) == 11
+    sources = [readme, *docs, (ROOT / "SECURITY.md").read_text(encoding="utf-8")] + [p.read_text(encoding="utf-8") for p in sorted((ROOT / "janitor").glob("*.py"))]
     for text in sources:
         assert old_form not in text
         assert "whose age therefore comes from the filesystem" not in text
-    # the program's two lines and the README's sample block say the same thing, byte for byte
+    # the program's two lines and the privacy contract's sample block say the same thing, byte for byte
     from janitor.bill import Bill, render_bill
     bill = Bill(question_chars=0, max_usd=None)
     bill.age_from_mtime, bill.dated, bill.stamp_dated = 25, 0, 0
     line = next(l for l in render_bill(bill, live=False).splitlines() if l.strip().startswith("age:"))
-    assert line in readme
+    assert line in contract

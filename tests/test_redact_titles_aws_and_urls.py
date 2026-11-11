@@ -185,7 +185,7 @@ def _label_lists(text: str) -> list[tuple[str, set[str]]]:
     return found
 
 
-@pytest.mark.parametrize("doc", ["README.md", "SECURITY.md", "POLICY.md"])
+@pytest.mark.parametrize("doc", ["docs/local-triage.md", "docs/records.md", "docs/what-jev-sees.md", "SECURITY.md", "POLICY.md"])  # 0.5.9: the README's lists moved to docs/
 def test_every_documented_list_of_quarantining_labels_matches_the_code(doc: str):
     """The next label added to HIGH_PRECISION_SECRETS must appear in every list the docs give,
     or this fails and names the stale sentence. Lists are recognised as a parenthesised run of

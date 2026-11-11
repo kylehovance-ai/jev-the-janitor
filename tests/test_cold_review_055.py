@@ -81,8 +81,8 @@ def test_a_run_never_sends_a_note_the_preflight_did_not_count(tmp_path: Path, wo
     trusted = scan_vault(vault, client=NewModel(), offline=True, cache=cache, workers=workers, trust_cache_across_models=True)
     tv = [r for r in trusted if r.get("kind") == "vote"]
     assert sum(1 for r in tv if not r["cached"]) == n_new and sum(1 for r in tv if r["cached"]) == 24
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert "a run never sends a note the pre-flight did not count as sent" in readme
+    journal_doc = (ROOT / "docs" / "run-journal.md").read_text(encoding="utf-8")
+    assert "a run never sends a note the pre-flight did not count as sent" in journal_doc
 
 
 def test_the_model_drift_stop_persists_across_a_plain_resume(tmp_path: Path, monkeypatch, capsys):
@@ -118,8 +118,8 @@ def test_the_model_drift_stop_persists_across_a_plain_resume(tmp_path: Path, mon
     assert cli.main(base + ["--resume"]) == 0  # run 5: the trust run ended normally; a plain resume serves as chosen
     rows = [r for r in json.loads(capsys.readouterr().out) if r.get("kind") == "vote"]
     assert sum(1 for r in rows if r["cached"]) == 25
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert "The stop persists: a plain `--resume` after it refuses before the consent question" in readme
+    journal_doc = (ROOT / "docs" / "run-journal.md").read_text(encoding="utf-8")
+    assert "The stop persists: a plain `--resume` after it refuses before the consent question" in journal_doc
 
 
 def test_denylist_matches_across_dots_slashes_and_dashes_and_names_its_residuals():
@@ -135,15 +135,15 @@ def test_denylist_matches_across_dots_slashes_and_dashes_and_names_its_residuals
     # and what it does: a possessive, a double space and a line break keep matching
     assert redact("Mara Quill's", denylist=["Mara Quill"]).text == "[NAME]'s"
     assert redact("Mara  Quill", denylist=["Mara Quill"]).text == "[NAME]"
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    contract = (ROOT / "docs" / "privacy-contract.md").read_text(encoding="utf-8")
     security = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
     docstring = (ROOT / "janitor" / "redact.py").read_text(encoding="utf-8")
-    for doc in (readme, security, docstring):
+    for doc in (contract, security, docstring):
         assert "Forms it does not match include" in doc
         for form in ("`Jane, Doe`", "`Jane;Doe`", "`Jane+Doe`", "`Jane|Doe`", "`Doe, Jane`", "`Jane Q. Doe`", "`JaneDoe`", "`**Jane** Doe`"):
             assert form in doc, form
         assert "the residuals" not in doc.split("Forms it does not match include")[1][:400]
-    assert "is the residual no rule can tell from a word" not in readme
+    assert "is the residual no rule can tell from a word" not in contract
 
 
 def test_authorization_basic_is_redacted_and_quarantined_like_bearer(tmp_path: Path):
@@ -168,9 +168,9 @@ def test_authorization_basic_is_redacted_and_quarantined_like_bearer(tmp_path: P
     (tmp_path / "n.md").write_text("# API note" + NL + NL + "curl -H 'Authorization: Basic dXNlcjpzM2NyZXRQYXNz' https://example.com" + NL, encoding="utf-8")
     rows = {r["path"]: r for r in scan_vault(tmp_path, offline=True)}
     assert rows["n.md"]["action"] == "quarantine" and "local:BEARER" in rows["n.md"]["quarantine_triggers"]
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    contract = (ROOT / "docs" / "privacy-contract.md").read_text(encoding="utf-8")
     security = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
-    assert "`Authorization: Basic` credentials" in readme and "`Authorization: Basic` credentials" in security
+    assert "`Authorization: Basic` credentials" in contract and "`Authorization: Basic` credentials" in security
 
 
 def test_show_payload_puts_sent_only_on_rows_that_leave(tmp_path: Path, capsys):
@@ -187,8 +187,8 @@ def test_show_payload_puts_sent_only_on_rows_that_leave(tmp_path: Path, capsys):
     for local in ("b.md", "empty.md", "leak.md"):
         assert rows[local]["judge"] == "local" and "sent" in rows[local] and rows[local]["sent"] is None, local
     assert rows["leak.md"]["action"] == "quarantine"
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert "is never sent, so its row says `sent: null`" in readme
+    contract = (ROOT / "docs" / "privacy-contract.md").read_text(encoding="utf-8")
+    assert "is never sent, so its row says `sent: null`" in contract
 
 
 def test_a_redirected_run_survives_a_non_latin_filename_on_a_cp1252_console(tmp_path: Path):
@@ -212,9 +212,9 @@ def test_a_redirected_run_survives_a_non_latin_filename_on_a_cp1252_console(tmp_
 def test_apply_resets_the_file_system_creation_time_and_the_readme_says_so(tmp_path: Path):
     """H1. The atomic write makes the stamped note a new file; the OS creation stamp moves to the
     run's time. Measured on Windows; disclosed, with the remedy, not changed."""
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert "A stamp resets the note's file-system creation time." in readme
-    assert "measured on Windows" in readme and "give your notes a `created:` key before the first `--apply`" in readme
+    contract = (ROOT / "docs" / "privacy-contract.md").read_text(encoding="utf-8")
+    assert "A stamp resets the note's file-system creation time." in contract
+    assert "measured on Windows" in contract and "give your notes a `created:` key before the first `--apply`" in contract
     if sys.platform != "win32":
         pytest.skip("st_birthtime semantics are measured on Windows only")
     def birth(p: Path) -> float:  # Windows: st_birthtime from 3.12; on 3.11 st_ctime is the creation time
@@ -235,7 +235,8 @@ def test_the_toml_example_quotes_the_current_reference_estimate():
     example = (ROOT / "janitor.toml.example").read_text(encoding="utf-8")
     assert "$1.39 to $1.88" in example and "$0.68" not in example
     # 0.5.6: the range is what the pre-flight prints; the projection is the README's $1.49, and they are not the same figure
-    assert "the pre-flight for a real 18,738-note vault at the default excerpt cap prints $1.39 to $1.88 (the README projects about $1.49)" in example
+    # (0.5.9: the projection moved to docs/privacy-contract.md with the pre-flight, and the example points there)
+    assert "the pre-flight for a real 18,738-note vault at the default excerpt cap prints $1.39 to $1.88 (docs/privacy-contract.md projects about $1.49)" in example
     assert "a projection, as in the README" not in example
-    assert "$1.39 to $1.88" in (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "$1.39 to $1.88" in (ROOT / "docs" / "privacy-contract.md").read_text(encoding="utf-8")
     assert "$1.39 to $1.88" in (ROOT / "janitor" / "bill.py").read_text(encoding="utf-8")
