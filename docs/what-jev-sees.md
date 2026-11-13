@@ -13,7 +13,7 @@ For each note it judges, a live run sends one object and the taxonomy's question
 | `frontmatter_keys` | the names of the note's frontmatter keys | names only, never values; each name is redacted; the tool's own `janitor` key is left out |
 | `aliases` | the frontmatter `aliases`, or `alias` when there is no `aliases` key | each alias is redacted like the title |
 | `excerpt` | the body | redacted first, then cut at the excerpt cap |
-| `other_note_titles` | the titles of other notes in the same folder | the closest by word overlap with this note's title, at most 80, each redacted and then cut to 80 characters; a note on a sensitive path, or one whose title holds a credential, is never listed |
+| `other_note_titles` | the titles of other notes in the same folder | the closest by word overlap with this note's title, at most 80, each redacted and then cut to 80 characters. Never listed: a note on a sensitive path, under a hidden folder or `_janitor/`, one that was not read, or one whose title holds a credential (the seven formats below). A title with any other hit, such as an `EMAIL`, `PHONE`, `CARD` or `SSN` match or a denylist match (`NAME`), is listed in its redacted form, with the label in place of the match |
 | `graph` | counts and flags about the note's place in the vault | exactly nine keys: `words` (banded), `headings`, `age_days` (banded), `out_links`, `in_links`, `embeds`, `unresolved_links`, `is_moc`, `is_orphan` |
 
 ## The defaults
@@ -28,12 +28,19 @@ Every live call also carries the seven questions in [`janitor/taxonomies/vault_m
 
 ## What never leaves
 
-- **Frontmatter values**, other than `aliases` (or `alias`): the state carries the key names only.
+What never leaves the machine includes the following; the list is not exhaustive.
+
+- **Frontmatter values**, except these: a non-empty `title` string becomes the state's `title` (and this note's entry in other notes' `other_note_titles`); `aliases`, or `alias` when there is no `aliases` key, becomes `aliases`; and the earliest parseable `created`, `date`, `created_at` or `creation_date`, or else the date in `janitor.created_from_mtime`, becomes `graph.age_days`, as a band of days, never as the date itself. Every other value stays local: the state carries the key names only.
 - **The absolute path.** The state's `path` is relative to the vault.
-- **Notes under hidden folders**, a folder or file name starting with `.`: they are never read, and `--include-sensitive` does not change that.
-- **Notes under sensitive folders**, unless you pass `--include-sensitive`. Even then, their titles are never listed as another note's sibling.
+- **Notes under a hidden folder, and hidden files**, any name starting with `.` inside the folder you scan: they are planned as `skip_hidden` and never opened, and `--include-sensitive` does not change that. A hidden folder you name as the target is scanned as named. A single note you name is skipped when a folder above it is hidden.
+- **Notes under `_janitor/`**, the tool's own working folder, including when you name it or a folder inside it: they are planned as `skip_janitor` and never opened, whatever the flags.
+- **Notes under sensitive folders**, unless you pass `--include-sensitive`. Even then, their titles are never listed as another note's sibling, and they are sent with no sibling titles of their own.
 - **A note with a credential hit** (`KEY`, `WEBHOOK`, `JWT`, `PEM`, `AWS_SECRET`, `BEARER` or `URL_CREDENTIAL`) in its own title, aliases, path, frontmatter key names or body: it is decided locally as a quarantine and is not sent. This is local triage, so `--no-local-triage` turns it off, and the note is then sent with the hit redacted.
-- **Any note a local triage rule decides** (an empty body, an exact duplicate, a credential hit): its row says `sent: null`. `--no-local-triage` sends these to Jev instead. A locked note (`janitor.locked: true`) is skipped with no request whatever the flags.
+- **A note local triage decides.** The rules, in the order `janitor/triage.py` checks them: a credential hit (above), an empty body or one with only headings, and an exact duplicate of a note earlier in plan order (the first copy is sent). Under `--show-payload` such a row says `sent: null`; without that flag no row has a `sent` key. `--no-local-triage` sends these to Jev instead.
+- **A locked note** (`janitor.locked: true`): it is skipped with no request, whatever the flags.
+- **A note that is not valid UTF-8, or that cannot be read**: its row is a `skip_undecodable` skip or an error, nothing of it is sent, and it is never listed as another note's sibling.
+- **The body past the excerpt cap.** The body is redacted whole and then cut, so only the first `--excerpt-chars` characters of the redacted body leave (16,000 by default; `full` is still cut at the 60,000-character guard).
+- **The original text of a redaction hit**, such as an `EMAIL`, `PHONE`, `CARD` or `SSN` match or a denylist match: it is replaced by its label, such as `[EMAIL]` or `[NAME]`, in every text field before sending, while the note itself still leaves. Redaction is best-effort: a format it does not recognise leaves as written (see [the privacy contract](privacy-contract.md)).
 
 ## An example
 
