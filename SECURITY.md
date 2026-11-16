@@ -131,7 +131,9 @@ its frontmatter key names, its excerpt and the sibling titles alike:
   `SessionToken` and `session_token` with no `aws` in front (through 0.4.6 no hit at all)
 - emails, phone numbers, card numbers, SSNs and denylisted names (`[EMAIL]`, `[PHONE]`,
   `[CARD]`, `[SSN]`, `[NAME]`; these redact but do not quarantine, because they
-  false-positive on ordinary prose). A denylist entry matches across any run of whitespace,
+  false-positive on ordinary prose). Phone, card and SSN shapes are found together on the
+  same text, and every one found is redacted whole (through 0.6.0 they ran one after another, and an SSN
+  followed by a card number went out as `123-45-[CARD] 1111`). A denylist entry matches across any run of whitespace,
   a line break included, and since 0.5.5 across an underscore, a hyphen, a dot, a slash and an en or
   em dash (`Jane_Doe`, `jane-doe`, `Jane.Doe`, `Jane/Doe`, `Jane–Doe`), and in its own redacted form;
   exactly these may stand between the words: whitespace, `_`, `-`, `.`, `/`, an en dash and an em

@@ -328,10 +328,115 @@ def _sub_with_retry(pat: re.Pattern[str], text: str, replace: Callable[[re.Match
     return "".join(pieces)
 
 
+# The number labels are resolved together, on one text, instead of one after another.
+# Through 0.6.0 each ran on the previous one's output, so the first to run could take part of
+# a number that belonged to a later one: in `123-45-6789 4111 1111 1111 1111` CARD (which ran
+# before SSN) took `6789 4111 1111 1111`, a valid card shape across the two numbers, and sent
+# `123-45-[CARD] 1111`: five SSN digits and the card's last four. Now every validated
+# candidate of every number label is found first, and the redaction covers all of them.
+NUMBER_LABELS = ("PHONE", "CARD", "SSN")
+_DIGIT_RIGHT = re.compile(r"[ -]?\d+")
+_DIGIT_LEFT = re.compile(r"\d+[ -]?$")
+
+
+def _number_candidates(text: str) -> list[tuple[int, int, str]]:
+    """Every (start, end, label) a number label validates, overlapping ones included.
+
+    A refused match is also tried shorter, ending at an earlier real boundary: in
+    `4111 1111 1111 1111-123-45-6789` CARD's optional tail took `-123`, Luhn refused the
+    19 digits, and the 16-digit card inside was never tried."""
+    found: list[tuple[int, int, str]] = []
+    for label, pat in PATTERNS:
+        if label not in NUMBER_LABELS:
+            continue
+        validator = VALIDATORS.get(label)
+        pos = 0
+        while (m := pat.search(text, pos)) is not None:
+            if validator is None or validator(m):
+                found.append((m.start(), m.end(), label))
+            else:
+                for end in range(m.end() - 1, m.start(), -1):
+                    if end < len(text) and text[end].isalnum():
+                        continue  # not a real boundary in the full text
+                    short = pat.match(text, m.start(), end)
+                    if short is not None and short.end() == end and (validator is None or validator(short)):
+                        found.append((short.start(), end, label))
+                        break
+            pos = m.start() + 1
+    return found
+
+
+def _redact_numbers(text: str) -> tuple[str, list[str]]:
+    """Redact every number candidate whole, and never leave part of a number chain behind.
+
+    1. Candidates are chosen earliest first (longest on a tie), skipping any that overlap
+       one already chosen; a skipped candidate that reaches past the chosen spans extends
+       the span it overlaps, so every character of every validated candidate is redacted.
+    2. A chosen span that stops against a digit, or a hyphen and a digit, cut a longer run
+       (`555-201-4477123-45-6789` held `201-4477123` as a phone shape and left the rest),
+       so it widens over the digits joined to it by a space or a hyphen, both ways, up to
+       another chosen span. A span with a space on each side is left as it is, which keeps
+       `qty 2 4111 1111 1111 1111` as `qty 2 [CARD]`.
+    """
+    candidates = sorted(_number_candidates(text), key=lambda c: (c[0], -(c[1] - c[0])))
+    if not candidates:
+        return text, []
+    spans: list[list] = []  # [start, end, label, {labels}]
+    skipped: list[tuple[int, int, str]] = []
+    for start, end, label in candidates:
+        if spans and start < spans[-1][1]:
+            skipped.append((start, end, label))
+            continue
+        spans.append([start, end, label, {label}])
+    for start, end, label in skipped:
+        # Any digit of a skipped candidate outside every chosen span joins the span it overlaps.
+        covered = lambda i: any(s[0] <= i < s[1] for s in spans)  # noqa: E731
+        if all(covered(i) for i in range(start, end) if text[i].isdigit()):
+            continue
+        host = next(s for s in spans if s[0] < end and start < s[1])
+        host[0], host[1] = min(host[0], start), max(host[1], end)
+        host[3].add(label)
+    spans.sort(key=lambda s: s[0])
+    merged: list[list] = []
+    for span in spans:  # an extension can reach the next span; two touching spans become one
+        if merged and span[0] < merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], span[1])
+            merged[-1][3] |= span[3]
+        else:
+            merged.append(span)
+    spans = merged
+    for i, span in enumerate(spans):
+        lo = spans[i - 1][1] if i else 0
+        hi = spans[i + 1][0] if i + 1 < len(spans) else len(text)
+        right_cut = re.match(r"-?\d", text[span[1]:hi]) is not None
+        left_cut = re.search(r"\d-?$", text[lo:span[0]]) is not None
+        if not (right_cut or left_cut):
+            continue
+        while (m := _DIGIT_RIGHT.match(text, span[1], hi)) is not None:
+            span[1] = m.end()
+        while (m := _DIGIT_LEFT.search(text, lo, span[0])) is not None and m.end() == span[0]:
+            span[0] = m.start()
+    pieces: list[str] = []
+    pos = 0
+    labels: set[str] = set()
+    for start, end, label, seen in spans:
+        pieces.append(text[pos:start])
+        pieces.append(f"[{label}]")
+        labels |= seen
+        pos = end
+    pieces.append(text[pos:])
+    return "".join(pieces), [label for label in NUMBER_LABELS if label in labels]
+
+
 def _apply_patterns(text: str) -> tuple[str, list[str]]:
     hits: list[str] = []
     out = text
     for label, pat in PATTERNS:
+        if label in NUMBER_LABELS:
+            if label == NUMBER_LABELS[0]:
+                out, number_hits = _redact_numbers(out)
+                hits.extend(number_hits)
+            continue
         validator = VALIDATORS.get(label)
         replacement = REPLACEMENTS.get(label)
 

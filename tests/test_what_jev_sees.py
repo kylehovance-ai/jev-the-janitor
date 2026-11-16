@@ -89,16 +89,35 @@ def test_the_examples_keys_are_a_fresh_demo_vault_states_keys():
 
 # --- 0.6.0: "What never leaves", one behavioural test per bullet, offline, no key ----------------
 # Each test builds a small invented vault and reads what was actually handed to the client (a
-# recording FixtureClient) or the --show-payload `sent` objects. Older gates that prove part of a
-# bullet are named beside it; these tests pin the page's own wording to the same behaviour.
+# recording FixtureClient) or the --show-payload `sent` objects, and checks the phrases of its own
+# bullet that it proves. Older gates that prove part of a bullet are named beside it.
+# 0.6.1: tightened so each test fails if its bullet were false (an outside audit's v0.6.0 items 20-31).
+
+from datetime import datetime, timedelta, timezone  # noqa: E402
+
+import pytest  # noqa: E402
 
 from janitor import cli  # noqa: E402
 from janitor import index as index_module  # noqa: E402
 from janitor.client import FixtureClient  # noqa: E402
+from janitor.index import banded_age  # noqa: E402
 from janitor.plan import plan_vault  # noqa: E402
+from janitor.policy import HIGH_PRECISION_SECRETS  # noqa: E402
+from janitor.redact import path_is_sensitive, redact  # noqa: E402
 from janitor.scan import scan_vault  # noqa: E402
 
 KEY = "sk-abcdefghijklmnopqrstuvwxyz012345"  # invented; the same shape tests/test_survey.py uses
+# One invented single-line sample per credential label (the AWS one is AWS's documented example key).
+CREDENTIALS = {
+    "KEY": KEY,
+    # the two URL-shaped ones are built here, so no file in the tree holds one whole (test_redact_formats)
+    "WEBHOOK": "https://hooks.slack.com/services/" + "T00000000/B00000000/" + "X" * 24,
+    "JWT": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U",
+    "PEM": "-----BEGIN RSA PRIVATE KEY----- MIIEpAIBAAKCAQEA",
+    "AWS_SECRET": "aws_secret_access_key=wJalrXUtnFEMIK7MDENGbPxRfiCYEXAMPLEKEY",
+    "BEARER": "Bearer abcdefghijklmnopqrstuvwxyz0123456789",
+    "URL_CREDENTIAL": "postgres://admin:" + "hunter2pass" + "@db.example.com/app",
+}
 
 
 class Recording(FixtureClient):
@@ -118,6 +137,11 @@ def _write(root: Path, rel: str, text: str) -> Path:
     return path
 
 
+def _note(root: Path, rel: str, front: list[str], body: str) -> Path:
+    head = ["---", *front, "---"] if front else []
+    return _write(root, rel, NL.join([*head, body, ""]))
+
+
 def _sent(vault: Path, **kwargs) -> dict[str, dict]:
     """The states the client received, by path."""
     rec = Recording()
@@ -130,22 +154,71 @@ def _rows(vault: Path, capsys, *extra: str) -> dict[str, dict]:
     return {r["path"]: r for r in json.loads(capsys.readouterr().out)}
 
 
+def _spy_load_note(monkeypatch) -> list[str]:
+    """Every path the index opens, by vault-relative posix form of its last three parts."""
+    opened: list[str] = []
+    real = index_module.load_note
+
+    def load(path: Path):
+        opened.append(path.as_posix())
+        return real(path)
+
+    monkeypatch.setattr(index_module, "load_note", load)
+    return opened
+
+
 def _never_leaves_bullets() -> list[str]:
     return re.findall(r"^- \*\*(.+?)\*\*", _section("What never leaves"), re.M)
 
 
+def _bullet(lead: str) -> str:
+    """The whole text of the bullet whose bold lead is ``lead``, flattened to one line."""
+    for line in _section("What never leaves").splitlines():
+        if line.startswith(f"- **{lead}**"):
+            return line
+    raise AssertionError(f"no bullet {lead!r}")
+
+
+def _today():
+    return datetime.now(timezone.utc).date()  # the date the index ages notes by
+
+
+def _band_for(days_ago: int) -> int:
+    return banded_age(days_ago)
+
+
 def test_frontmatter_values_other_than_title_aliases_and_creation_dates_never_leave(tmp_path: Path):
-    _write(tmp_path, "n.md", NL.join(["---", "title: Garden plan", "aliases: [Beds]", "created: 2024-03-03",
-                                      "modified: 2019-07-07", "owner: quokka-marmalade", "tags: [zebra-quartz]",
-                                      "rating: 4711", "---", "# Heading", "", "body text", ""]))
-    state = _sent(tmp_path)["n.md"]
-    wire = json.dumps(state)
-    for value in ("quokka-marmalade", "zebra-quartz", "4711", "2019-07-07", "2024-03-03", "2024"):
-        assert value not in wire, value  # values stay local; `created` arrives only as a band
-    assert state["title"] == "Garden plan" and state["aliases"] == ["Beds"]  # the frontmatter title wins over the H1
-    assert state["frontmatter_keys"] == ["aliases", "created", "modified", "owner", "rating", "tags", "title"]
-    assert state["graph"]["age_days"] in index_module.AGE_BANDS  # a band of days, not the date
-    assert "a non-empty `title` string becomes the state's `title`" in _section("What never leaves")
+    today = _today()
+    recent, old, ancient = (today - timedelta(days=10)), (today - timedelta(days=400)), (today - timedelta(days=2000))
+    assert len({_band_for(10), _band_for(400), _band_for(2000), _band_for(0)}) == 4  # four distinct bands, so each source is told apart
+    notes = {
+        # the earliest creation key wins; `modified` (a different band again) does not feed it
+        "Garden/earliest.md": (["title: Garden plan", "aliases: [Beds]", f"created: {recent}", f"date: {old}",
+                                f"modified: {ancient}", "owner: quokka-marmalade", "tags: [zebra-quartz]", "rating: 4711"], "# Heading" + NL + NL + "body text one", 400),
+        "Garden/date.md": ([f"date: {old}", f"modified: {ancient}"], "# D" + NL + NL + "body two", 400),
+        "Garden/created_at.md": ([f"created_at: {old}", f"updated: {ancient}"], "# C" + NL + NL + "body three", 400),
+        "Garden/creation_date.md": ([f"creation_date: {old}", f"modified: {ancient}"], "# CD" + NL + NL + "body four", 400),
+        "Garden/stamped.md": (["janitor:", "  bucket: junk", f"  created_from_mtime: {old}", f"modified: {ancient}"], "# S" + NL + NL + "body five", 400),
+        "Garden/alias.md": (["alias: Single alias"], "# A" + NL + NL + "body six", 0),  # no creation key: the mtime, today
+    }
+    for rel, (front, body, _) in notes.items():
+        _note(tmp_path, rel, front, body)
+    sent = _sent(tmp_path)
+    wire = json.dumps(sent)
+    for value in ("quokka-marmalade", "zebra-quartz", "4711", str(recent), str(old), str(ancient)):
+        assert value not in wire, value  # values stay local; the dates arrive only as bands
+    for rel, (_, _, days) in notes.items():
+        assert sent[rel]["graph"]["age_days"] == _band_for(days), rel
+    first = sent["Garden/earliest.md"]
+    assert first["title"] == "Garden plan" and first["aliases"] == ["Beds"]  # the frontmatter title wins over the H1
+    assert first["frontmatter_keys"] == ["aliases", "created", "date", "modified", "owner", "rating", "tags", "title"]
+    assert sent["Garden/alias.md"]["aliases"] == ["Single alias"]  # `alias` is read when there is no `aliases`
+    assert "Garden plan" in sent["Garden/date.md"]["other_note_titles"] and "Heading" not in json.dumps(sent["Garden/date.md"])
+    text = _bullet("Frontmatter values")
+    for phrase in ("a non-empty `title` string becomes the state's `title`", "this note's entry in other notes' `other_note_titles`",
+                   "`aliases`, or `alias` when there is no `aliases` key", "the earliest parseable `created`, `date`, `created_at` or `creation_date`",
+                   "or else the date in `janitor.created_from_mtime`", "as a band of days, never as the date itself", "the key names only"):
+        assert phrase in text, phrase
 
 
 def test_the_absolute_path_never_leaves(tmp_path: Path):
@@ -155,45 +228,62 @@ def test_the_absolute_path_never_leaves(tmp_path: Path):
     wire = json.dumps(state)
     assert state["path"] == "Areas/n.md"
     assert str(tmp_path) not in wire and tmp_path.as_posix() not in wire and tmp_path.name not in wire
+    assert "The state's `path` is relative to the vault." in _bullet("The absolute path.")
 
 
-def test_hidden_notes_inside_the_scan_are_never_opened_and_a_named_hidden_folder_is_scanned(tmp_path: Path, monkeypatch):
+def test_hidden_notes_inside_the_scan_are_never_opened_and_the_named_cases_are_exact(tmp_path: Path, monkeypatch):
     """tests/test_preflight.py::test_hidden_folders_are_skipped_by_the_dot_rule_not_the_list covers the plan."""
-    _write(tmp_path, ".hidden/h.md", "# Hidden" + NL + NL + "hidden body" + NL)
-    _write(tmp_path, "notes/.h2.md", "# Hidden file" + NL + NL + "hidden body" + NL)
-    _write(tmp_path, "notes/v.md", "# Visible" + NL + NL + "body" + NL)
-    opened: list[str] = []
-    real = index_module.load_note
-
-    def load(path: Path):
-        opened.append(path.name)
-        return real(path)
-
-    monkeypatch.setattr(index_module, "load_note", load)
+    vault = tmp_path / "v"
+    _write(vault, ".hidden/h.md", "# Hidden" + NL + NL + "hidden body" + NL)
+    _write(vault, "notes/.h2.md", "# Hidden file" + NL + NL + "hidden body two" + NL)
+    _write(vault, "notes/v.md", "# Visible" + NL + NL + "body" + NL)
+    opened = _spy_load_note(monkeypatch)
     for include_sensitive in (False, True):
-        _, plan = plan_vault(tmp_path, include_sensitive=include_sensitive)
+        _, plan = plan_vault(vault, include_sensitive=include_sensitive)
         status = {e.rel: e.status for e in plan}
         assert status[".hidden/h.md"] == status["notes/.h2.md"] == "skip_hidden" and status["notes/v.md"] == "scan"
-        sent = _sent(tmp_path, include_sensitive=include_sensitive)
+        sent = _sent(vault, include_sensitive=include_sensitive)
         assert set(sent) == {"notes/v.md"} and "Hidden" not in json.dumps(sent)
-    assert "h.md" not in opened and ".h2.md" not in opened  # stat only, never read
-    assert set(_sent(tmp_path / ".hidden")) == {"h.md"}  # named as the target, it is scanned as named
-    _, plan = plan_vault(tmp_path / ".hidden" / "h.md")
-    assert [e.status for e in plan] == ["skip_hidden"]  # a single note named under a hidden folder is skipped
+    assert not any(p.endswith(("/h.md", "/.h2.md")) for p in opened)  # stat only, never read
+    # a hidden folder named as the target is scanned as named, and its notes list each other
+    _write(vault, ".hidden/h2.md", "# Second hidden" + NL + NL + "another body" + NL)
+    named = _sent(vault / ".hidden")
+    assert set(named) == {"h.md", "h2.md"} and named["h.md"]["other_note_titles"] == ["Second hidden"]
+    # a single note named directly: with an .obsidian/ marker, hidden folders count from the marker's folder down
+    _write(tmp_path, "X/.secret/Vault/.obsidian/app.json", "{}")
+    _write(tmp_path, "X/.secret/Vault/note.md", "# Above the marker" + NL + NL + "body m" + NL)  # hidden folder above the vault root
+    _write(tmp_path, "X/.secret/Vault/.inner/deep.md", "# Below the marker" + NL + NL + "body d" + NL)  # hidden folder inside it
+    _write(tmp_path, ".Vault3/.obsidian/app.json", "{}")
+    _write(tmp_path, ".Vault3/n.md", "# Hidden vault" + NL + NL + "body h" + NL)  # the marker's own folder is hidden, and counts
+    # with no marker, any hidden ancestor counts
+    _write(tmp_path, "Y/.hid/V2/note.md", "# No marker" + NL + NL + "body n" + NL)
+    for rel, expected in (("X/.secret/Vault/note.md", "scan"), ("X/.secret/Vault/.inner/deep.md", "skip_hidden"),
+                          (".Vault3/n.md", "skip_hidden"), ("Y/.hid/V2/note.md", "skip_hidden")):
+        assert [e.status for e in plan_vault(tmp_path / rel)[1]] == [expected], rel
+    assert set(_sent(tmp_path / "X/.secret/Vault/note.md")) == {"note.md"} and _sent(tmp_path / "Y/.hid/V2/note.md") == {}
+    text = _bullet("Notes under a hidden folder, and hidden files")
+    for phrase in ("never opened", "`--include-sensitive` does not change that",
+                   "A folder you name as the target is scanned as named, even when it or a folder above it is hidden.",
+                   "a hidden folder between the folder that holds `.obsidian/` (that folder included) and the note skips it, and one above that folder does not",
+                   "with no `.obsidian/` above the note, any hidden folder above it skips it."):
+        assert phrase in text, phrase
 
 
-def test_janitor_working_folder_notes_are_never_opened_even_when_named(tmp_path: Path):
+def test_janitor_working_folder_notes_are_never_opened_even_when_named(tmp_path: Path, monkeypatch):
     _write(tmp_path, "_janitor/quarantine/q.md", "# Quarantined" + NL + NL + "body" + NL)
     _write(tmp_path, "v.md", "# Visible" + NL + NL + "body" + NL)
+    opened = _spy_load_note(monkeypatch)
     for include_sensitive in (False, True):
         _, plan = plan_vault(tmp_path, include_sensitive=include_sensitive)
         assert {e.rel: e.status for e in plan}["_janitor/quarantine/q.md"] == "skip_janitor"
         sent = _sent(tmp_path, include_sensitive=include_sensitive)
         assert set(sent) == {"v.md"} and "Quarantined" not in json.dumps(sent)
-    for named in (tmp_path / "_janitor", tmp_path / "_janitor" / "quarantine"):
+    for named in (tmp_path / "_janitor", tmp_path / "_janitor" / "quarantine", tmp_path / "_janitor" / "quarantine" / "q.md"):
         _, plan = plan_vault(named)
         assert [e.status for e in plan] == ["skip_janitor"]
         assert _sent(named) == {}
+    assert opened and not any(p.endswith("/q.md") for p in opened)  # the spy saw v.md opened, and never q.md
+    assert "never opened, whatever the flags" in _bullet("Notes under `_janitor/`")
 
 
 def test_a_sensitive_notes_title_is_never_a_sibling_and_it_gets_none(tmp_path: Path):
@@ -203,21 +293,56 @@ def test_a_sensitive_notes_title_is_never_a_sibling_and_it_gets_none(tmp_path: P
     _write(tmp_path, "public/plan.md", "# Public plan" + NL + NL + "body three" + NL)
     _write(tmp_path, "public/sib.md", "# Sibling" + NL + NL + "body four" + NL)
     sent = _sent(tmp_path)
-    assert set(sent) == {"public/plan.md", "public/sib.md"} and "Secret plan" not in json.dumps(sent["public/sib.md"])
+    assert set(sent) == {"public/plan.md", "public/sib.md"} and "Secret plan" not in json.dumps(sent)
     sent = _sent(tmp_path, include_sensitive=True)
     assert {"family/Secret plan.md", "family/Other plan.md"} <= set(sent)
     assert sent["family/Secret plan.md"]["other_note_titles"] == [] and sent["family/Other plan.md"]["other_note_titles"] == []
     assert all("Secret plan" not in t and "Other plan" not in t for s in sent.values() for t in s["other_note_titles"])
+    text = _bullet("Notes under sensitive folders")
+    assert "titles are never listed as another note's sibling" in text and "sent with no sibling titles of their own" in text
 
 
-def test_a_credential_hit_is_not_sent_and_says_sent_null_and_no_local_triage_sends_it_redacted(tmp_path: Path, capsys):
-    _write(tmp_path, "leak.md", "# Leak" + NL + NL + KEY + NL)
-    _write(tmp_path, "ok.md", "# Ok" + NL + NL + "body" + NL)
-    assert set(_sent(tmp_path)) == {"ok.md"}
-    rows = _rows(tmp_path, capsys, "--show-payload")
-    assert rows["leak.md"]["judge"] == "local" and rows["leak.md"]["sent"] is None
-    sent = _sent(tmp_path, local_triage=False)
-    assert KEY not in json.dumps(sent) and "[KEY]" in sent["leak.md"]["excerpt"]
+# Where each own field puts the sample. A path segment cannot hold `/`, so the two URL-shaped
+# credentials have no path case (a folder name with a slash is two folders).
+FIELDS = {
+    "title": lambda s: ("n.md", [f"title: 'Note {s}'"], "# Plain" + NL + NL + "clean body words"),
+    "aliases": lambda s: ("n.md", [f"aliases: ['{s}']"], "# Plain" + NL + NL + "clean body words"),
+    "path": lambda s: (f"{s}/n.md", [], "# Plain" + NL + NL + "clean body words"),
+    "frontmatter key name": lambda s: ("n.md", [f"'{s}': 1"], "# Plain" + NL + NL + "clean body words"),
+    "body": lambda s: ("n.md", [], "# Plain" + NL + NL + f"clean body words {s}"),
+}
+CREDENTIAL_CASES = [(label, field) for label in CREDENTIALS for field in FIELDS
+                    if not (field == "path" and "/" in CREDENTIALS[label])]
+
+
+def test_the_credential_samples_are_exactly_the_seven_labels():
+    assert set(CREDENTIALS) == set(HIGH_PRECISION_SECRETS) and len(CREDENTIALS) == 7
+    for label, sample in CREDENTIALS.items():
+        assert redact(sample).hits == [label], label
+    assert len(CREDENTIAL_CASES) == 7 * 5 - 2
+
+
+@pytest.mark.parametrize(("label", "field"), CREDENTIAL_CASES)
+def test_a_credential_hit_in_any_own_field_is_not_sent_and_says_sent_null(tmp_path: Path, capsys, label: str, field: str):
+    rel, front, body = FIELDS[field](CREDENTIALS[label])
+    _note(tmp_path, rel, front, body)
+    _write(tmp_path, "other.md", "# Other" + NL + NL + "another clean body" + NL)
+    # The PEM sample's folder name holds the word `PRIVATE`, a sensitive name, so that case is
+    # skipped before triage by default; --include-sensitive lets the credential rule decide it.
+    sensitive = path_is_sensitive(rel)
+    assert sensitive == (field == "path" and label == "PEM")
+    flags = {"include_sensitive": True} if sensitive else {}
+    assert set(_sent(tmp_path, **flags)) == {"other.md"}
+    rows = _rows(tmp_path, capsys, "--show-payload", *(["--include-sensitive"] if sensitive else []))
+    leak = next(r for path, r in rows.items() if path != "other.md")
+    assert leak["judge"] == "local" and leak["action"] == "quarantine" and leak["sent"] is None
+    assert label in leak["redacted_own"] and leak["quarantine_triggers"]
+    # without local triage the note is sent, the credential replaced by its label
+    sent = _sent(tmp_path, local_triage=False, **flags)
+    assert len(sent) == 2 and CREDENTIALS[label] not in json.dumps(sent) and f"[{label}]" in json.dumps(sent)
+    text = _bullet("A note with a credential hit")
+    assert "in its own title, aliases, path, frontmatter key names or body" in text and "`--no-local-triage` turns it off" in text
+    assert re.findall(r"`([A-Z_]+)`", text.split("**")[2].split(")")[0]) == list(HIGH_PRECISION_SECRETS)
 
 
 def test_local_triage_decides_three_rules_and_sent_is_only_a_show_payload_key(tmp_path: Path, capsys):
@@ -235,6 +360,8 @@ def test_local_triage_decides_three_rules_and_sent_is_only_a_show_payload_key(tm
     plain = _rows(tmp_path, capsys)
     assert all("sent" not in r for r in plain.values())  # without the flag no row has the key
     assert set(_sent(tmp_path, local_triage=False)) == {"a.md", "b.md", "empty.md", "heads.md", "leak.md"}
+    text = _bullet("A note local triage decides.")
+    assert "Under `--show-payload` such a row says `sent: null`; without that flag no row has a `sent` key." in text
 
 
 def test_a_locked_note_is_skipped_with_no_request_whatever_the_flags(tmp_path: Path):
@@ -245,6 +372,7 @@ def test_a_locked_note_is_skipped_with_no_request_whatever_the_flags(tmp_path: P
         rec = Recording()
         rows = {r["path"]: r for r in scan_vault(tmp_path, client=rec, offline=True, **kwargs)}
         assert [s["path"] for s in rec.states] == ["ok.md"] and rows["locked.md"]["action"] == "skip_locked", kwargs
+    assert "skipped with no request, whatever the flags" in _bullet("A locked note")
 
 
 def test_an_undecodable_or_unreadable_note_is_never_sent_nor_a_sibling(tmp_path: Path, monkeypatch):
@@ -265,51 +393,76 @@ def test_an_undecodable_or_unreadable_note_is_never_sent_nor_a_sibling(tmp_path:
     assert rows["bad.md"]["action"] == "skip_undecodable" and rows["gone.md"]["kind"] == "error"
     wire = json.dumps(rec.states)
     assert "Bad title" not in wire and "Gone title" not in wire and rec.states[0]["other_note_titles"] == []
+    text = _bullet("A note that is not valid UTF-8, or that cannot be read")
+    assert "nothing of it is sent, and it is never listed as another note's sibling" in text
 
 
-def test_the_body_past_the_excerpt_cap_never_leaves(tmp_path: Path):
-    """tests/test_excerpt_chars.py covers the caps; this pins that the text past the cut is absent."""
-    head, tail = "kept " * 50, "porcupine-tail " * 20
-    _write(tmp_path, "long.md", "# Long" + NL + NL + head + tail + NL)
+def test_the_body_past_the_excerpt_cap_never_leaves_and_a_hit_across_the_cap_is_redacted_first(tmp_path: Path):
+    """tests/test_excerpt_chars.py covers the caps. Here a hit straddles the cut: cut-then-redact would
+    send `ada.exampl` (no longer an email, so no hit); redact-then-cut sends `[EMAIL]`."""
+    email = "ada.example@example.org"
+    head = "# Long" + NL + NL
+    filler = "a" * (190 - len(head) - 1) + " "
+    body = head + filler + email + " " + "porcupine-tail " * 20
+    assert body.index(email) == 190 and body.index(email) + len(email) > 200  # it straddles character 200
+    _write(tmp_path, "long.md", body + NL)
     state = _sent(tmp_path, excerpt_chars=200)["long.md"]
     assert len(state["excerpt"]) == 200 and "porcupine" not in json.dumps(state)
-    assert state["excerpt"].startswith("# Long" + NL + NL + "kept kept")
+    assert "ada.exampl" not in state["excerpt"] and state["excerpt"][190:197] == "[EMAIL]"
+    assert "The body is redacted whole and then cut" in _bullet("The body past the excerpt cap.")
 
 
 def test_the_original_text_of_a_redaction_hit_never_leaves_while_the_note_does(tmp_path: Path):
     email, name, phone = "ada.example@example.org", "Jane Placeholder", "555-201-4477"
-    _write(tmp_path, f"Notes/{name}.md", NL.join(["---", f"aliases: [{email}]", "---", f"# Call {name}", "",
-                                                   f"write to {email} or call {phone}", ""]))
-    _write(tmp_path, "Notes/Sibling.md", NL.join(["---", f"title: Sibling {email}", "---", "body", ""]))
+    card, ssn = "4111 1111 1111 1111", "123-45-6789"  # a documented test card number and an invented SSN
+    _note(tmp_path, f"Notes/{name}.md", [f"aliases: [{email}]", f"'{email}': 1"],
+          NL.join([f"# Call {name}", "", f"write to {email} or call {phone}", f"card {card}", f"ssn {ssn} {card}"]))
+    _note(tmp_path, "Notes/Sibling.md", [f"title: Sibling {email}"], "sibling body")
     sent = _sent(tmp_path, denylist=[name])
     wire = json.dumps(sent)
-    assert email not in wire and name not in wire and phone not in wire
+    for original in (email, name, phone, card, ssn, "123-45", "1111"):
+        assert original not in wire, original
     state = sent["Notes/[NAME].md"]  # the note itself leaves, with labels in place, path included
-    assert state["title"] == "Call [NAME]" and state["aliases"] == ["[EMAIL]"] and "[EMAIL]" in state["excerpt"]
-    assert "[PHONE]" in state["excerpt"]
+    assert state["title"] == "Call [NAME]" and state["aliases"] == ["[EMAIL]"] and "[EMAIL]" in state["frontmatter_keys"]
+    assert state["excerpt"].endswith("write to [EMAIL] or call [PHONE]" + NL + "card [CARD]" + NL + "ssn [SSN] [CARD]")
     assert state["other_note_titles"] == ["Sibling [EMAIL]"]  # a non-credential hit is listed, redacted
+    text = _bullet("The original text of a redaction hit")
+    assert "such as an `EMAIL`, `PHONE`, `CARD` or `SSN` match or a denylist match" in text and "while the note itself still leaves" in text
 
 
 NEVER_LEAVES_TESTS = {
     "Frontmatter values": test_frontmatter_values_other_than_title_aliases_and_creation_dates_never_leave,
     "The absolute path.": test_the_absolute_path_never_leaves,
-    "Notes under a hidden folder, and hidden files": test_hidden_notes_inside_the_scan_are_never_opened_and_a_named_hidden_folder_is_scanned,
+    "Notes under a hidden folder, and hidden files": test_hidden_notes_inside_the_scan_are_never_opened_and_the_named_cases_are_exact,
     "Notes under `_janitor/`": test_janitor_working_folder_notes_are_never_opened_even_when_named,
     "Notes under sensitive folders": test_a_sensitive_notes_title_is_never_a_sibling_and_it_gets_none,
-    "A note with a credential hit": test_a_credential_hit_is_not_sent_and_says_sent_null_and_no_local_triage_sends_it_redacted,
+    "A note with a credential hit": test_a_credential_hit_in_any_own_field_is_not_sent_and_says_sent_null,
     "A note local triage decides.": test_local_triage_decides_three_rules_and_sent_is_only_a_show_payload_key,
     "A locked note": test_a_locked_note_is_skipped_with_no_request_whatever_the_flags,
     "A note that is not valid UTF-8, or that cannot be read": test_an_undecodable_or_unreadable_note_is_never_sent_nor_a_sibling,
-    "The body past the excerpt cap.": test_the_body_past_the_excerpt_cap_never_leaves,
+    "The body past the excerpt cap.": test_the_body_past_the_excerpt_cap_never_leaves_and_a_hit_across_the_cap_is_redacted_first,
     "The original text of a redaction hit": test_the_original_text_of_a_redaction_hit_never_leaves_while_the_note_does,
 }
 
 
 def test_every_never_leaves_bullet_has_a_test():
-    """Adding a bullet without a test, or rewording one's lead, fails here."""
+    """Adding a bullet without a test, or rewording one's lead, fails here. Bodies are pinned by
+    phrase in each bullet's own test (`_bullet`), at the claims that test proves."""
     assert _never_leaves_bullets() == list(NEVER_LEAVES_TESTS)
     section = _section("What never leaves")
     assert "What never leaves the machine includes the following; the list is not exhaustive." in section
     triage = (ROOT / "janitor" / "triage.py").read_text(encoding="utf-8")
     assert re.findall(r'LocalDecision\(vote, .*?, "(\w+)"\)', triage) == ["secret", "empty", "duplicate"]
     assert "a credential hit (above), an empty body or one with only headings, and an exact duplicate" in section
+
+
+def test_the_sibling_cell_names_who_is_never_listed_and_a_named_hidden_folder(tmp_path: Path):
+    """0.6.1, outside audit, line 16: "under a hidden folder" was false for a hidden folder you name."""
+    cell = next(line for line in _section("The state: exactly seven fields").splitlines() if line.startswith("| `other_note_titles` |"))
+    assert "a note under a hidden folder, or a hidden file, inside the folder you scan" in cell
+    assert "A hidden folder you name as the target is scanned as named, so its notes are listed as each other's siblings." in cell
+    _write(tmp_path, "notes/a.md", "# Alpha" + NL + NL + "body a" + NL)
+    _write(tmp_path, "notes/.b.md", "# Hidden beta" + NL + NL + "body b" + NL)
+    _write(tmp_path, "notes/.h/c.md", "# Hidden gamma" + NL + NL + "body c" + NL)
+    _write(tmp_path, "notes/d.md", "# Delta" + NL + NL + "body d" + NL)
+    assert _sent(tmp_path)["notes/a.md"]["other_note_titles"] == ["Delta"]

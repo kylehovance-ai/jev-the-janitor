@@ -116,8 +116,11 @@ FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "notes"
 # Re-pinned 2026-09-25 WITHOUT a bump (still 15), 0.5.6: only a comment and the docstring in redact.py changed (the
 # joiner and every pattern are byte-identical to 0.5.5); the whole module's source is watched, so the digest moved
 # while nothing that leaves the machine did.
-RECORDED_STATE_SOURCES_DIGEST = "c34ab5423ecb2313"
-RECORDED_STATE_VERSION = 15
+# Re-pinned 2026-11-15 WITH a bump to 16 (0.6.1): PHONE, CARD and SSN are resolved together on one text instead of
+# one after another, so `123-45-6789 4111 1111 1111 1111` sends `[SSN] [CARD]` (0.6.0 sent `123-45-[CARD] 1111`). That
+# changes what leaves for such a note, so every key is re-made and an upgrade re-judges every note.
+RECORDED_STATE_SOURCES_DIGEST = "f6e1f53b72bcfb26"
+RECORDED_STATE_VERSION = 16
 
 
 def test_state_version_is_bumped_when_state_sources_change():
