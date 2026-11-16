@@ -105,6 +105,7 @@ from janitor.plan import plan_vault  # noqa: E402
 from janitor.policy import HIGH_PRECISION_SECRETS  # noqa: E402
 from janitor.redact import path_is_sensitive, redact  # noqa: E402
 from janitor.scan import scan_vault  # noqa: E402
+from tests.test_redact_numbers_together import WIDEN_SENTENCE  # noqa: E402
 
 KEY = "sk-abcdefghijklmnopqrstuvwxyz012345"  # invented; the same shape tests/test_survey.py uses
 # One invented single-line sample per credential label (the AWS one is AWS's documented example key).
@@ -205,7 +206,7 @@ def test_frontmatter_values_other_than_title_aliases_and_creation_dates_never_le
         _note(tmp_path, rel, front, body)
     sent = _sent(tmp_path)
     wire = json.dumps(sent)
-    for value in ("quokka-marmalade", "zebra-quartz", "4711", str(recent), str(old), str(ancient)):
+    for value in ("quokka-marmalade", "zebra-quartz", "4711", "junk", str(recent), str(old), str(ancient)):
         assert value not in wire, value  # values stay local; the dates arrive only as bands
     for rel, (_, _, days) in notes.items():
         assert sent[rel]["graph"]["age_days"] == _band_for(days), rel
@@ -261,6 +262,14 @@ def test_hidden_notes_inside_the_scan_are_never_opened_and_the_named_cases_are_e
                           (".Vault3/n.md", "skip_hidden"), ("Y/.hid/V2/note.md", "skip_hidden")):
         assert [e.status for e in plan_vault(tmp_path / rel)[1]] == [expected], rel
     assert set(_sent(tmp_path / "X/.secret/Vault/note.md")) == {"note.md"} and _sent(tmp_path / "Y/.hid/V2/note.md") == {}
+    # 0.6.2 (outside audit of 0.6.1, item 11): what is sent, not only the plan status
+    assert _sent(tmp_path / "X/.secret/Vault/.inner/deep.md") == {} and _sent(tmp_path / ".Vault3/n.md") == {}
+    # a folder named as the target under a hidden ancestor is scanned as named; a hidden folder inside it is not
+    sent = _sent(tmp_path / "X/.secret/Vault")
+    assert set(sent) == {"note.md"} and "Below the marker" not in json.dumps(sent)
+    assert set(_sent(tmp_path / "Y/.hid/V2")) == {"note.md"}
+    assert not any(p.endswith(("/deep.md", "/n.md")) for p in opened)  # the skipped ones were never read
+    assert set(_sent(tmp_path / ".Vault3")) == {"n.md"}  # the hidden vault named as a folder is scanned as named
     text = _bullet("Notes under a hidden folder, and hidden files")
     for phrase in ("never opened", "`--include-sensitive` does not change that",
                    "A folder you name as the target is scanned as named, even when it or a folder above it is hidden.",
@@ -278,6 +287,9 @@ def test_janitor_working_folder_notes_are_never_opened_even_when_named(tmp_path:
         assert {e.rel: e.status for e in plan}["_janitor/quarantine/q.md"] == "skip_janitor"
         sent = _sent(tmp_path, include_sensitive=include_sensitive)
         assert set(sent) == {"v.md"} and "Quarantined" not in json.dumps(sent)
+    before = (tmp_path / "_janitor/quarantine/q.md").read_bytes()
+    sent = _sent(tmp_path, apply=True)  # 0.6.2 (audit item 14): an applying run does not open it either
+    assert set(sent) == {"v.md"} and (tmp_path / "_janitor/quarantine/q.md").read_bytes() == before
     for named in (tmp_path / "_janitor", tmp_path / "_janitor" / "quarantine", tmp_path / "_janitor" / "quarantine" / "q.md"):
         _, plan = plan_vault(named)
         assert [e.status for e in plan] == ["skip_janitor"]
@@ -364,14 +376,48 @@ def test_local_triage_decides_three_rules_and_sent_is_only_a_show_payload_key(tm
     assert "Under `--show-payload` such a row says `sent: null`; without that flag no row has a `sent` key." in text
 
 
-def test_a_locked_note_is_skipped_with_no_request_whatever_the_flags(tmp_path: Path):
+def test_the_triage_rules_apply_in_the_pages_order_by_outcome(tmp_path: Path, capsys):
+    """0.6.2 (outside audit of 0.6.1, item 12): the order is proved by what a note that fits two rules becomes."""
+    _write(tmp_path, "k1.md", "# K1" + NL + NL + KEY + NL)
+    _write(tmp_path, "k2.md", "# K1" + NL + NL + KEY + NL)  # a credential and an exact duplicate of k1.md
+    _write(tmp_path, "kempty.md", f"# Note {KEY}" + NL)  # a credential (in the title) and headings only
+    _write(tmp_path, "e1.md", "")
+    _write(tmp_path, "e2.md", "")  # empty, and the same bytes as e1.md
+    rows = _rows(tmp_path, capsys)
+    for rel in ("k1.md", "k2.md", "kempty.md"):  # secret wins over duplicate and over empty
+        assert rows[rel]["action"] == "quarantine" and rows[rel]["bucket"] == "needs_review", rel
+        assert rows[rel]["contains_secret"] == 1.0 and rows[rel]["looks_like_duplicate"] == 0.0, rel
+    for rel in ("e1.md", "e2.md"):  # empty wins over duplicate
+        assert rows[rel]["action"] == "frontmatter" and rows[rel]["reason"].startswith("empty body or headings only"), rel
+        assert rows[rel]["looks_like_duplicate"] == 0.0, rel
+    # the duplicate rule itself still fires when nothing earlier does
+    _write(tmp_path, "d1.md", "# D" + NL + NL + "a body twice" + NL)
+    _write(tmp_path, "d2.md", "# D" + NL + NL + "a body twice" + NL)
+    assert _rows(tmp_path, capsys)["d2.md"]["reason"] == "exact duplicate of d1.md: decided locally"
+
+
+def test_a_locked_note_is_skipped_with_no_request_whatever_the_flags(tmp_path: Path, capsys, monkeypatch):
     """tests/test_triage.py::test_locked_note_is_a_skip_row_with_no_request_and_no_rewrite covers the default."""
     _write(tmp_path, "locked.md", NL.join(["---", "janitor:", "  locked: true", "---", "# Locked", "", "locked body", ""]))
     _write(tmp_path, "ok.md", "# Ok" + NL + NL + "open body" + NL)  # a different body, so neither is a duplicate
-    for kwargs in ({}, {"local_triage": False}, {"include_sensitive": True}):
+    before = (tmp_path / "locked.md").read_bytes()
+    for kwargs in ({}, {"local_triage": False}, {"include_sensitive": True}, {"apply": True}):
         rec = Recording()
         rows = {r["path"]: r for r in scan_vault(tmp_path, client=rec, offline=True, **kwargs)}
         assert [s["path"] for s in rec.states] == ["ok.md"] and rows["locked.md"]["action"] == "skip_locked", kwargs
+        assert (tmp_path / "locked.md").read_bytes() == before, kwargs  # 0.6.2 (audit item 13): apply leaves it as it was
+    # and through the CLI's --apply: every request the client receives is recorded, and none is the locked note's
+    seen: list[str] = []
+    real_vote = FixtureClient.vote
+
+    def vote(self, state, questions):
+        seen.append(state["path"])
+        return real_vote(self, state, questions)
+
+    monkeypatch.setattr(FixtureClient, "vote", vote)
+    rows = _rows(tmp_path, capsys, "--apply")
+    assert rows["locked.md"]["action"] == "skip_locked" and seen == ["ok.md"]  # the spy saw the one request
+    assert (tmp_path / "locked.md").read_bytes() == before
     assert "skipped with no request, whatever the flags" in _bullet("A locked note")
 
 
@@ -410,6 +456,12 @@ def test_the_body_past_the_excerpt_cap_never_leaves_and_a_hit_across_the_cap_is_
     assert len(state["excerpt"]) == 200 and "porcupine" not in json.dumps(state)
     assert "ada.exampl" not in state["excerpt"] and state["excerpt"][190:197] == "[EMAIL]"
     assert "The body is redacted whole and then cut" in _bullet("The body past the excerpt cap.")
+    # 0.6.2 (audit item 15): the defaults themselves, on a note longer than both
+    _write(tmp_path, "long.md", "# Long" + NL + NL + "plain words " * 6000 + NL)  # 72,009 characters
+    assert _sent(tmp_path)["long.md"]["excerpt"] == load_note(tmp_path / "long.md").body[:16000]
+    assert len(_sent(tmp_path)["long.md"]["excerpt"]) == 16000
+    assert len(_sent(tmp_path, excerpt_chars=cli.parse_excerpt_chars("full"))["long.md"]["excerpt"]) == 60000
+    assert "(16,000 by default; `full` is still cut at the 60,000-character guard)" in _bullet("The body past the excerpt cap.")
 
 
 def test_the_original_text_of_a_redaction_hit_never_leaves_while_the_note_does(tmp_path: Path):
@@ -428,6 +480,25 @@ def test_the_original_text_of_a_redaction_hit_never_leaves_while_the_note_does(t
     assert state["other_note_titles"] == ["Sibling [EMAIL]"]  # a non-credential hit is listed, redacted
     text = _bullet("The original text of a redaction hit")
     assert "such as an `EMAIL`, `PHONE`, `CARD` or `SSN` match or a denylist match" in text and "while the note itself still leaves" in text
+    # 0.6.2 (audit items 1 and 16, and round 2): what is not recognised leaves as written; digits touching a match can go with it
+    _note(tmp_path, "Notes/Formats.md", [], NL.join(["# Formats", "", "order 123456789 placed", "met on 2026-11-15 here",
+                                                      "call 555-201-4477-2026 now", "qty 2 4111 1111 1111 1111 paid",
+                                                      "qty 2 4111 1111 1111 1111-2026 paid", "dial 555-201-4477 2026 times"]))
+    excerpt = _sent(tmp_path, denylist=[name])["Notes/Formats.md"]["excerpt"]
+    assert "order 123456789 placed" in excerpt and "met on 2026-11-15 here" in excerpt  # recognised by no rule
+    assert "call [PHONE] now" in excerpt and "qty 2 [CARD] paid" in excerpt and "2026 now" not in excerpt
+    assert "qty [CARD] paid" in excerpt and "dial [PHONE] 2026 times" in excerpt  # widening runs both ways; spaces alone take nothing
+    # the sentence is the same in the three docs, and every example it quotes is checked against redact()
+    # in tests/test_redact_numbers_together.py::test_every_example_the_widen_sentence_quotes_is_what_redact_does
+    assert WIDEN_SENTENCE in text
+    for phrase in ("redaction can also take nearby digits", "when a digit touches the match, directly or across a hyphen",
+                   "joined to it by a single hyphen or space, on either side, can be redacted with it",
+                   "Two joiners in a row, such as two spaces or a space and a hyphen, end it",
+                   "A neighbouring phone, card or SSN usually keeps its own label",
+                   "when the two overlap, they can share one label, and every digit of both is still redacted",
+                   "A match with only spaces around it takes nothing",
+                   "a number in a format no rule recognises, such as a nine-digit order number or a date standing alone, leaves as written"):
+        assert phrase in WIDEN_SENTENCE, phrase
 
 
 NEVER_LEAVES_TESTS = {

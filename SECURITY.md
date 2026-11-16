@@ -133,7 +133,19 @@ its frontmatter key names, its excerpt and the sibling titles alike:
   `[CARD]`, `[SSN]`, `[NAME]`; these redact but do not quarantine, because they
   false-positive on ordinary prose). Phone, card and SSN shapes are found together on the
   same text, and every one found is redacted whole (through 0.6.0 they ran one after another, and an SSN
-  followed by a card number went out as `123-45-[CARD] 1111`). A denylist entry matches across any run of whitespace,
+  followed by a card number went out as `123-45-[CARD] 1111`). Next to a phone, card or SSN match,
+  redaction can also take nearby digits: when a digit touches the match, directly or across a
+  hyphen, the digits joined to it by a single hyphen or space, on either side, can be redacted with
+  it, so a date, a count or an order number touching the match can go too (`555-201-4477-2026`
+  becomes `[PHONE]`, and `qty 2 4111 1111 1111 1111-2026` becomes `qty [CARD]`). Two joiners in a
+  row, such as two spaces or a space and a hyphen, end it (`555-201-4477-99  123` becomes
+  `[PHONE]  123`). This errs toward privacy. A neighbouring phone, card or SSN usually keeps its own
+  label (`555-201-4477-123-45-6789` becomes `[PHONE]-[SSN]`); when the two overlap, they can share
+  one label, and every digit of both is still redacted (`4111 1111 1111 1111-003-45-6789` becomes
+  `[CARD]`). A match with only spaces around it takes nothing (`qty 2 4111 1111 1111 1111` becomes
+  `qty 2 [CARD]`; `555-201-4477 2026` becomes `[PHONE] 2026`). Elsewhere, a number in a format no
+  rule recognises, such as a nine-digit order number or a date standing alone, leaves as written. A
+  denylist entry matches across any run of whitespace,
   a line break included, and since 0.5.5 across an underscore, a hyphen, a dot, a slash and an en or
   em dash (`Jane_Doe`, `jane-doe`, `Jane.Doe`, `Jane/Doe`, `Jane–Doe`), and in its own redacted form;
   exactly these may stand between the words: whitespace, `_`, `-`, `.`, `/`, an en dash and an em
